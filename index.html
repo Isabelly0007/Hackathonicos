@@ -4,13 +4,44 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Taylor | Hub de operação multicanal</title>
-    <link rel="icon" href="assets/logo.png" />
+    <link rel="icon" type="image/svg+xml" href="img/logo.svg" />
+    <link rel="icon" type="image/png" href="img/logo.png" />
+    <link rel="apple-touch-icon" href="img/logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <!-- Tela de carregamento (splash). Fica no HTML para aparecer antes do javascript.js rodar.
+         Controlada pelas funções showSplash() / hideSplash() do javascript.js. -->
+    <div class="splash go" id="splash" role="status" aria-live="polite">
+      <div class="splash-stage">
+        <svg class="splash-logo" viewBox="0 0 512 512" role="img" aria-label="Logo Taylor: um T formado por módulos alinhados">
+          <defs>
+            <linearGradient id="splash-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#236bff" /><stop offset="1" stop-color="#3f35f5" /></linearGradient>
+            <radialGradient id="splash-gl" cx=".15" cy=".1" r=".8"><stop offset="0" stop-color="#4db5ff" stop-opacity=".55" /><stop offset="1" stop-color="#4db5ff" stop-opacity="0" /></radialGradient>
+          </defs>
+          <g class="splash-tile">
+            <rect width="512" height="512" rx="134" fill="url(#splash-bg)" />
+            <rect width="512" height="512" rx="134" fill="url(#splash-gl)" />
+            <rect x="1.5" y="1.5" width="509" height="509" rx="132.5" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="3" />
+          </g>
+          <rect class="splash-c" style="--i:0;--x:-700px;--y:-520px;--r:-40deg" x="92" y="122" width="56" height="56" rx="14" fill="#fff" />
+          <rect class="splash-c" style="--i:1;--x:420px;--y:-700px;--r:25deg" x="160" y="122" width="56" height="56" rx="14" fill="#fff" />
+          <rect class="splash-c" style="--i:2;--x:-200px;--y:-800px;--r:60deg" x="228" y="122" width="56" height="56" rx="14" fill="#fff" />
+          <rect class="splash-c" style="--i:3;--x:760px;--y:-400px;--r:-30deg" x="296" y="122" width="56" height="56" rx="14" fill="#fff" />
+          <rect class="splash-c" style="--i:4;--x:900px;--y:-560px;--r:45deg" x="364" y="122" width="56" height="56" rx="14" fill="#fff" />
+          <rect class="splash-c" style="--i:5;--x:-620px;--y:520px;--r:-50deg" x="228" y="190" width="56" height="56" rx="14" fill="#dcecff" />
+          <rect class="splash-c" style="--i:6;--x:300px;--y:760px;--r:35deg" x="228" y="258" width="56" height="56" rx="14" fill="#b9deff" />
+          <rect class="splash-c" style="--i:7;--x:-260px;--y:900px;--r:-20deg" x="228" y="326" width="56" height="56" rx="14" fill="#36db9b" />
+        </svg>
+        <div class="splash-word" aria-label="Taylor"><span style="--i:0">T</span><span style="--i:1">a</span><span style="--i:2">y</span><span style="--i:3">l</span><span style="--i:4">o</span><span style="--i:5">r</span></div>
+        <p class="splash-tag">Estamos carregando suas lojas. Aguarde...</p>
+        <div class="splash-bar" role="progressbar" aria-label="Carregando"><i></i></div>
+      </div>
+    </div>
+
     <!-- Todo o conteúdo (login, sidebar, dashboard...) é montado pelo javascript.js dentro desta div -->
     <div id="root"></div>
     <script src="javascript.js"></script>
