@@ -14,7 +14,8 @@
 const CONFIG = {
   useApi: false, // mude para true quando o backend estiver rodando
   apiBase: "/api", // ex.: "http://localhost:8000/api"
-  logo: "assets/logo.png",
+  logo: "img/logo.svg", // logo usada no sistema todo (login, sidebar, topbar, chat)
+  splashMin: { abertura: 2500, carregamento: 3000 }, // tempo mínimo (ms) da tela de carregamento
   brand: "Taylor",
   telegram: "https://t.me/taylor_assistente_bot", // link do bot/canal no Telegram
   supportEmail: "suporte@taylor.com.br",
@@ -614,11 +615,7 @@ async function loadChannels() {
 
 function renderDashboard() {
   $("#content").innerHTML = dashboardShell();
-  loadStats();
-  loadChart();
-  loadDonut();
-  loadAlerts();
-  loadChannels();
+  return Promise.all([loadStats(), loadChart(), loadDonut(), loadAlerts(), loadChannels()]);
 }
 
 /* Produtos */
@@ -1042,6 +1039,7 @@ function renderShell() {
     <div class="workspace">
       <header class="topbar">
         <button class="menu-button" type="button" data-action="open-menu" aria-label="Abrir menu">☰</button>
+        <div class="topbar-brand">${logo()}</div>
         <div class="search"><span>⌕</span><input placeholder="Buscar produtos, pedidos, SKU..." /></div>
         <div class="top-actions">
           <button class="notification" type="button" aria-label="Notificações" data-page="Notificações">${icon("bell")}<i id="notif-dot" ${unreadCount() ? "" : "hidden"}></i></button>
@@ -1062,7 +1060,7 @@ function renderShell() {
     <div class="toast" id="toast" role="status" hidden></div>
   </div>`;
   updateThemeButton();
-  renderPage();
+  return renderPage();
 }
 
 let renderToken = 0;
@@ -1070,10 +1068,7 @@ async function renderPage() {
   const token = ++renderToken;
   const content = $("#content");
   if (!content) return;
-  if (state.page === "Início") {
-    renderDashboard();
-    return;
-  }
+  if (state.page === "Início") return renderDashboard();
   const map = {
     Produtos: renderProducts,
     Pedidos: renderOrders,
@@ -1097,8 +1092,51 @@ function updateThemeButton() {
 }
 
 function render() {
-  if (state.loggedIn) renderShell();
-  else renderLogin();
+  if (state.loggedIn) return renderShell();
+  renderLogin();
+}
+
+/* ---------- Tela de carregamento (splash) ----------
+   O HTML do splash está no index.html (aparece antes deste arquivo carregar).
+   showSplash("abertura")     -> toca uma vez, sem frase (ao abrir o sistema)
+   showSplash("carregamento") -> frase + barra, repete a cada 7s se demorar
+   withSplash(modo, tarefa)   -> mostra o splash até a tarefa terminar (com tempo mínimo) */
+const splash = { el: $("#splash"), timer: null };
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function playSplash() {
+  splash.el.classList.remove("go");
+  void splash.el.offsetWidth; // reinicia as animações CSS
+  splash.el.classList.add("go");
+}
+
+function showSplash(modo = "abertura") {
+  if (!splash.el) return;
+  const loading = modo === "carregamento";
+  window.clearInterval(splash.timer);
+  splash.el.classList.toggle("load", loading);
+  splash.el.classList.remove("hide");
+  splash.el.removeAttribute("aria-hidden");
+  playSplash();
+  if (loading) splash.timer = window.setInterval(playSplash, 7000);
+}
+
+function hideSplash() {
+  if (!splash.el) return;
+  window.clearInterval(splash.timer);
+  splash.el.classList.add("hide");
+  splash.el.setAttribute("aria-hidden", "true");
+}
+
+async function withSplash(modo, tarefa) {
+  showSplash(modo);
+  const min = reducedMotion ? 400 : CONFIG.splashMin[modo];
+  const wait = new Promise((resolve) => window.setTimeout(resolve, min));
+  try {
+    await Promise.all([tarefa(), wait]);
+  } finally {
+    hideSplash();
+  }
 }
 
 /* ---------- 5. EVENTOS ---------- */
@@ -1299,7 +1337,7 @@ document.addEventListener("submit", (event) => {
     }
     state.loggedIn = true;
     state.page = "Início";
-    render();
+    withSplash("carregamento", render);
   }
   if (event.target.id === "chat-form") {
     const input = $("#chat-input");
@@ -1310,5 +1348,5 @@ document.addEventListener("submit", (event) => {
   }
 });
 
-/* Início */
-render();
+/* Início: splash de abertura por cima enquanto a tela de login é montada */
+withSplash("abertura", render);
