@@ -39,7 +39,7 @@ flowchart LR
     L -. "mensagens" .-> TG
 ```
 
-Fluxo resumido (baseado no fluxograma do MVP — [diagramas/fluxograma-mvp.png](diagramas/fluxograma-mvp.png)):
+Fluxo resumido do sistema:
 
 1. O lojista acessa o Taylor e faz **login ou cadastro**, informando **CNPJ e dados da empresa**.
 2. O lojista **conecta os marketplaces**. O back-end solicita autorização (OAuth), recebe o `access_token` e salva a integração. **No MVP essa conexão é simulada.**
