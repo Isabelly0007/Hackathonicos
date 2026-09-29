@@ -77,7 +77,7 @@ Funcionalidades do MVP listadas no resumo do projeto, cruzadas com o que existe 
 
 | Área | Planejado (resumo do projeto) | Encontrado no repositório |
 |---|---|---|
-| Front-end | React + Vite | HTML + CSS + JavaScript puro (divergência — ver [pendencias.md](pendencias.md)) |
+| Front-end | React + Vite | HTML + CSS + JavaScript puro |
 | Back-end | Python | Não existe; comentário no front cita FastAPI |
 | Banco de dados | Supabase | Não existe |
 | IA | Gemini API | Não existe; respostas fixas no front |
