@@ -161,7 +161,8 @@ apresentações em que o público usa o sistema ao mesmo tempo:
   "em andamento" há mais de 2 minutos é considerada presa (o servidor reiniciou no meio dela): vira erro
   ao iniciar o back-end ou quando a empresa pede uma nova sincronização. As recentes não são tocadas,
   porque podem estar rodando em outro worker.
-- Deploy no Render: `render.yaml` na raiz (passo a passo em [COMO-RODAR.md](../COMO-RODAR.md)).
+- Deploy no Render: `render.yaml` na raiz, com o back-end (web service `taylor-api`) e o bot (background
+  worker `taylor-bot`, só uma cópia por token). Passo a passo em [COMO-RODAR.md](../COMO-RODAR.md).
 
 ## Teste de carga
 
@@ -199,8 +200,9 @@ alguns segundos, que é o primeiro cenário. No Supabase (rede e CPU compartilha
 ## bot_estoque
 
 Bot do Telegram **@EstoqueLojas_bot** (Node.js + Telegraf). Busca as mensagens por **long polling**
-(`bot.launch()`, sem webhook), então só pode haver uma cópia ligada por token. O servidor HTTP da porta
-`PORT` só responde "Bot Online!" para o Render.
+(`bot.launch()`, sem webhook), então só pode haver uma cópia ligada por token. No Render ele é um
+background worker; só se `PORT` estiver definida (bot rodando como web service) ele abre um servidor HTTP
+que responde "Bot Online!".
 
 - Usa as **mesmas tabelas** do Taylor: conecta direto no Postgres (`pg`) com a mesma `DATABASE_URL`,
   `search_path = DB_SCHEMA` (padrão `taylor`; nunca o `public`). Pool de `DB_POOL_MAX` conexões (padrão 3).

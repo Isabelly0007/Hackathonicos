@@ -233,9 +233,20 @@ senha `taylor123`. Rodar o script de novo não duplica nada; as tabelas `public`
 
 ## Publicar no Render (palestra com o público usando junto)
 
-O arquivo `render.yaml` (na raiz) descreve o back-end, que também serve as telas. No Render:
-**New › Blueprint**, escolha o repositório e preencha `DATABASE_URL` (a mesma do `backend\.env`) e, se
-quiser o Gemini, `GEMINI_API_KEY`. O resto já vem configurado:
+O arquivo `render.yaml` (na raiz) descreve dois serviços na região Virginia (us-east, perto do Supabase):
+
+| Serviço | Tipo | Plano no `render.yaml` | O quê |
+|---|---|---|---|
+| `taylor-api` | Web service (Python) | `1c-2g` (1 CPU, 2 GB) | Back-end + telas; health check em `/api/health` |
+| `taylor-bot` | Background worker (Node) | `0.5c-512mb` (0,5 CPU, 512 MB) | Bot do Telegram (long polling, não recebe HTTP) |
+
+> ⚠️ **Bot: uma cópia só por token.** Antes de aplicar o Blueprint, **suspenda ou apague** o serviço antigo
+> do bot no Render e não deixe `npm start` rodando em nenhum computador. Com duas cópias, o Telegram entrega
+> cada mensagem para uma só, e a outra fica com erro 409.
+
+No Render: **New › Blueprint**, escolha o repositório e a branch, e preencha os valores secretos:
+`DATABASE_URL` (a mesma do `backend\.env`, **nos dois serviços**), `TELEGRAM_TOKEN` (bot) e, se quiser o
+Gemini, `GEMINI_API_KEY`. O resto já vem configurado:
 
 | Variável | Valor | Por quê |
 |---|---|---|
@@ -261,12 +272,11 @@ computador no mesmo banco. O back-end mostra a conta no log ao ligar.
 
 **No dia:**
 
-- Use um plano **pago** no serviço do back-end (Starter ou maior): o gratuito "dorme" depois de 15 minutos
-  sem uso (o primeiro acesso demora quase 1 minuto) e tem só 0,1 CPU.
-- Abra o site alguns minutos antes de mostrar o QR code, para ele já estar acordado.
-- O bot **não** entra no `render.yaml`: ele já roda como outro serviço no Render, e uma segunda cópia com o
-  mesmo token faria o Telegram entregar as mensagens para uma cópia só. No serviço do bot, adicione
-  `DATABASE_URL`, `DB_SCHEMA=taylor` e `DB_POOL_MAX=3`.
+- Use planos **pagos**: o gratuito "dorme" depois de 15 minutos sem acesso (o primeiro acesso demora cerca
+  de 1 minuto) e não existe para background workers. A cobrança é proporcional ao segundo: dá para usar o
+  `1c-2g` no dia da palestra e baixar o back-end para `0.5c-512mb` depois (Settings › Instance Type).
+- Abra o site alguns minutos antes de mostrar o QR code e confira `/api/health`.
+- Confira no log do `taylor-bot` a linha `🤖 Bot @EstoqueLojas_bot ligado ao Taylor...`.
 - O Gemini gratuito aceita poucas perguntas por minuto. Com muita gente, o assistente passa a usar as
   palavras-chave (continua respondendo estoque, vendas de hoje, pedidos pendentes e estoque baixo).
 - Espaço no banco: cada conta Demo ocupa cerca de 1 MB (o plano grátis do Supabase tem 500 MB).

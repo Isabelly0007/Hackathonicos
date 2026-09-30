@@ -670,9 +670,12 @@ bot.catch((err, ctx) => {
     ctx.reply('⚠️ Ocorreu um erro ao falar com o sistema. Tente novamente em instantes.').catch(() => {});
 });
 
-// Servidor HTTP para manter o Render ativo 24/7
-const http = require('http');
-http.createServer((req, res) => { res.writeHead(200); res.end('Bot Online!'); }).listen(process.env.PORT || 3001);
+// Só quando o bot roda como web service (o Render define PORT): responde "Bot Online!" para o
+// serviço ser considerado de pé. Como background worker (render.yaml) não precisa de porta.
+if (process.env.PORT) {
+    const http = require('http');
+    http.createServer((req, res) => { res.writeHead(200); res.end('Bot Online!'); }).listen(process.env.PORT);
+}
 
 // Long polling (getUpdates): o bot busca as mensagens no Telegram; não há webhook.
 // Só pode haver UMA cópia ligada por token (a segunda recebe erro 409 do Telegram).
