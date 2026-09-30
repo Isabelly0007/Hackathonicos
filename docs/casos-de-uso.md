@@ -227,8 +227,9 @@ Especificação textual no padrão UML. O diagrama está em [diagramas/casos-de-
 |---|---|
 | Ator | Lojista; Telegram; Gemini |
 | Objetivo | Consultar a operação sem abrir o Taylor |
-| Pré-condições | Conta do Telegram vinculada ao usuário (processo Pendente de definição) |
+| Pré-condições | Conta do Telegram vinculada ao usuário: comando `/login` no bot com o e-mail e a senha do painel |
 | Fluxo principal | 1. Lojista envia mensagem ao bot. 2. Telegram entrega a mensagem ao back-end (webhook). 3. Sistema identifica o usuário/empresa pelo chat. 4. Executa os passos 3–5 do UC17. 5. Sistema envia a resposta via Telegram. |
+| Como ficou implementado | O bot `@EstoqueLojas_bot` (`bot_estoque/`) recebe as mensagens por **long polling** (não há webhook) e responde a comandos (`/estoque`, `/lojas`, `/estoqueloja`, `/entrada`, `/baixa`, `/novo`) consultando direto as tabelas do schema `taylor`. As perguntas em linguagem natural com o Gemini ficam no assistente do painel (UC17). |
 | Fluxos alternativos | **A1 — Chat não vinculado**: bot orienta o vínculo. **A2 — Intenção não reconhecida**: resposta padrão. |
 | Pós-condições | Resposta entregue no Telegram. |
 

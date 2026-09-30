@@ -1,0 +1,64 @@
+# Render Blueprint do Taylor: back-end (FastAPI, que também serve o front) e bot do Telegram.
+#
+# ATENÇÃO — bot: ele usa long polling, então é um background worker e só pode haver UMA cópia
+# ligada por token. Antes de aplicar este Blueprint, desligue qualquer outro bot com o mesmo
+# TELEGRAM_TOKEN (um serviço antigo no Render ou um `npm start` num computador).
+#
+# Conexões com o banco (Session pooler do Supabase; cada conexão ocupa uma vaga do Pool Size):
+#   WEB_CONCURRENCY x DB_POOL_MAX (web) + DB_POOL_MAX (bot) <= Pool Size  ->  2 x 5 + 3 = 13
+#
+# Planos (render.com/pricing, 30/09/2026): 1c-2g = 1 CPU, 2 GB, US$ 25/mês; 0.5c-512mb =
+# 0,5 CPU, 512 MB, US$ 7/mês; cobrança proporcional ao segundo. O plano "free" dorme depois de
+# 15 min sem acesso e não existe para background workers. Passo a passo em COMO-RODAR.md.
+services:
+  - type: web
+    name: taylor-api
+    runtime: python
+    region: virginia            # us-east, perto do Supabase (aws-0-us-east-1)
+    plan: 1c-2g                 # para a palestra; depois dá para baixar para 0.5c-512mb
+    buildCommand: pip install -r backend/requirements.txt
+    # O uvicorn usa WEB_CONCURRENCY como número de workers. Keep-alive maior que o do proxy do
+    # Render evita conexões fechadas no meio de uma requisição.
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 75
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL       # Supabase > Connect > Session pooler (porta 5432); a mesma do bot
+        sync: false
+      - key: DB_SCHEMA
+        value: taylor
+      - key: JWT_SECRET         # o mesmo em todos os workers; gerado uma vez pelo Render
+        generateValue: true
+      - key: DEMO_MODE          # false: sem token não há acesso, e o link de "esqueci a senha" não aparece na tela
+        value: "false"
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: DB_POOL_MAX
+        value: "5"
+      - key: CONTA_DEMO_HORAS
+        value: "6"
+      - key: CONTA_DEMO_MAX
+        value: "200"
+      - key: GEMINI_API_KEY     # opcional: sem chave o assistente usa palavras-chave
+        sync: false
+
+  - type: worker                # long polling: não recebe HTTP, só busca as mensagens no Telegram
+    name: taylor-bot
+    runtime: node
+    region: virginia
+    plan: 0.5c-512mb
+    rootDir: bot_estoque
+    buildCommand: npm ci
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: TELEGRAM_TOKEN     # token do @EstoqueLojas_bot (BotFather)
+        sync: false
+      - key: DATABASE_URL       # a MESMA do taylor-api
+        sync: false
+      - key: DB_SCHEMA
+        value: taylor
+      - key: DB_POOL_MAX
+        value: "3"

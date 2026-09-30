@@ -11,13 +11,25 @@
    ===================================================================== */
 
 /* ---------- 1. CONFIG ---------- */
+// Aberto na própria máquina (localhost, 127.0.0.1 ou dois cliques no arquivo): ambiente de desenvolvimento.
+const EM_LOCALHOST = ["localhost", "127.0.0.1", ""].includes(location.hostname);
 const CONFIG = {
-  useApi: false, // mude para true quando o backend estiver rodando
-  apiBase: "/api", // ex.: "http://localhost:8000/api"
+  useApi: true, // true = usa o backend (FastAPI); false = só os dados de exemplo abaixo
+  local: EM_LOCALHOST, // só em localhost o login vem preenchido com o usuário de teste
+  // Publicado (ex.: Render) ou aberto pelo backend (porta 8000): mesma origem, "/api".
+  // Aberto como arquivo ou por outro servidor local (ex.: Live Server): aponta para o backend na porta 8000.
+  apiBase: location.protocol.startsWith("http") && (!EM_LOCALHOST || location.port === "8000") ? "/api" : "http://localhost:8000/api",
   logo: "img/logo.svg", // logo usada no sistema todo (login, sidebar, topbar, chat)
   splashMin: { abertura: 2500, carregamento: 3000 }, // tempo mínimo (ms) da tela de carregamento
   brand: "Taylor",
-  telegram: "https://t.me/taylor_assistente_bot", // link do bot/canal no Telegram
+  // logos dos marketplaces (arquivos dentro da pasta img/)
+  marketLogos: {
+    "Mercado Livre": "img/logo_mercadolivre.png",
+    Shopee: "img/logo_shopee.png",
+    Magalu: "img/logo_magalu.webp",
+    "TikTok Shop": "img/logo_tiktokshop.avif",
+  },
+  telegram: "https://t.me/EstoqueLojas_bot", // link do bot/canal no Telegram
   supportEmail: "suporte@taylor.com.br",
 };
 
@@ -97,11 +109,11 @@ const salesByChannel = {
 };
 
 const orderStatuses = [
-  { label: "Aguardando", value: 12, color: "#2f8bff" },
-  { label: "Em separação", value: 18, color: "#8b5cf6" },
-  { label: "Em transporte", value: 10, color: "#ff8a5b" },
-  { label: "Entregue", value: 46, color: "#36db9b" },
-  { label: "Cancelado", value: 4, color: "#ff5672" },
+  { label: "Aguardando", value: 12, color: "#4FC3DC" },
+  { label: "Em separação", value: 18, color: "#FFC24B" },
+  { label: "Em transporte", value: 10, color: "#499cff" },
+  { label: "Entregue", value: 46, color: "#3DDC97" },
+  { label: "Cancelado", value: 4, color: "#F0416C" },
 ];
 
 const stockAlerts = [
@@ -134,11 +146,11 @@ const orders = [
 ];
 
 const stock = [
-  ["Tênis Runner Pro", "TEN001", "24", "10", "24", "24", "24", "Sincronizado"],
-  ["Mochila Urban", "MOC012", "12", "8", "12", "10", "12", "Divergência detectada"],
-  ["Camiseta Essentials", "CAM034", "52", "10", "52", "52", "52", "Sincronizado"],
-  ["Garrafa Térmica", "GAR203", "0", "6", "0", "0", "0", "Sem estoque"],
-  ["Fone Bluetooth", "FON045", "8", "10", "8", "8", "8", "Estoque baixo"],
+  ["Tênis Runner Pro", "TEN001", "24", "10", "24", "24", "24", "—", "Sincronizado"],
+  ["Mochila Urban", "MOC012", "12", "8", "12", "10", "12", "—", "Divergência detectada"],
+  ["Camiseta Essentials", "CAM034", "52", "10", "52", "52", "52", "—", "Sincronizado"],
+  ["Garrafa Térmica", "GAR203", "0", "6", "0", "0", "0", "—", "Sem estoque"],
+  ["Fone Bluetooth", "FON045", "8", "10", "8", "8", "8", "—", "Estoque baixo"],
 ];
 
 const invoices = [
@@ -153,6 +165,7 @@ const marketplaceData = [
   ["Mercado Livre", "ML", "128", "42", "R$ 4.230,40"],
   ["Shopee", "S", "96", "31", "R$ 1.840,10"],
   ["Magalu", "M", "88", "17", "R$ 1.250,00"],
+  ["TikTok Shop", "TT", "64", "23", "R$ 980,50"],
 ];
 
 const chatAnswers = {
@@ -223,11 +236,38 @@ const serviceStatus = [
   ["Bot do Telegram", "Operacional"],
 ];
 
-/* ---------- 3. API (troque pelos endpoints do seu backend) ---------- */
+/* ---------- 3. API (endpoints do backend — docs/api-backend.md) ----------
+   Leituras (apiGet): se o backend falhar, usam os dados de exemplo.
+   Escritas (apiSend): devolvem { ok, status, data } para a tela tratar o erro. */
+const TOKEN_KEY = "taylor.token";
+const storage = {
+  get: () => localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY),
+  set: (token, remember) => (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, token),
+  clear: () => (localStorage.removeItem(TOKEN_KEY), sessionStorage.removeItem(TOKEN_KEY)),
+};
+
+function authHeaders() {
+  const token = storage.get();
+  return token ? { Authorization: "Bearer " + token } : {};
+}
+
+function sessionExpired(res) {
+  if (res.status !== 401 || !state.loggedIn) return false;
+  storage.clear();
+  state.loggedIn = false;
+  render();
+  window.setTimeout(() => {
+    const error = $("#login-error");
+    if (error) (error.textContent = "Sua sessão expirou. Entre novamente."), (error.hidden = false);
+  });
+  return true;
+}
+
 async function apiGet(path, fallback) {
   if (!CONFIG.useApi) return fallback;
   try {
-    const res = await fetch(CONFIG.apiBase + path);
+    const res = await fetch(CONFIG.apiBase + path, { headers: authHeaders() });
+    if (sessionExpired(res)) return fallback;
     if (!res.ok) throw new Error("HTTP " + res.status);
     return await res.json();
   } catch (error) {
@@ -236,18 +276,87 @@ async function apiGet(path, fallback) {
   }
 }
 
+async function apiSend(method, path, body) {
+  if (!CONFIG.useApi) return { ok: false, status: 0, data: { detail: "Backend desligado (CONFIG.useApi = false)." } };
+  try {
+    const res = await fetch(CONFIG.apiBase + path, {
+      method,
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (sessionExpired(res)) return { ok: false, status: 401, data: null };
+    const data = res.status === 204 ? null : await res.json().catch(() => null);
+    return { ok: res.ok, status: res.status, data };
+  } catch (error) {
+    return { ok: false, status: 0, data: { detail: "Não foi possível falar com o servidor. Verifique se o backend está rodando." } };
+  }
+}
+
+// Mensagem legível a partir do formato de erro do backend ({ detail, code, fields }).
+function apiError(res, fallback = "Não foi possível concluir a ação.") {
+  const data = res.data || {};
+  const fields = data.fields ? Object.values(data.fields).join(" ") : "";
+  return [data.detail || fallback, fields].filter(Boolean).join(" ");
+}
+
+const q = (params) => {
+  const s = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")).toString();
+  return s ? "?" + s : "";
+};
+
 const api = {
-  stats: (period) => apiGet("/dashboard/stats?period=" + encodeURIComponent(period), dashboardStats[period]),
-  sales: (range) => apiGet("/dashboard/sales?range=" + encodeURIComponent(range), salesByChannel[range]),
+  // Compatibilidade (formato dos dados de exemplo). ids=1 acrescenta o id no fim de cada linha.
+  stats: (period) => apiGet("/dashboard/stats" + q({ period }), dashboardStats[period]),
+  sales: (range) => apiGet("/dashboard/sales" + q({ range }), salesByChannel[range]),
   orderStatuses: () => apiGet("/dashboard/order-statuses", orderStatuses),
   stockAlerts: () => apiGet("/dashboard/stock-alerts", stockAlerts),
   channels: () => apiGet("/channels", connectedChannels),
-  products: () => apiGet("/products", products),
-  orders: () => apiGet("/orders", orders),
+  products: (status) => apiGet("/products" + q({ status, ids: 1 }), products),
+  orders: (status) => apiGet("/orders" + q({ status, ids: 1 }), orders),
   stock: () => apiGet("/stock", stock),
-  invoices: () => apiGet("/invoices", invoices),
+  invoices: (status) => apiGet("/invoices" + q({ status, ids: 1 }), invoices),
   marketplaces: () => apiGet("/marketplaces", marketplaceData),
+  // Contratos novos (sem dado de exemplo: a tela usa os valores fixos antigos se vier null).
+  me: () => apiGet("/auth/me", null),
+  productsSummary: () => apiGet("/products/summary", null),
+  product: (id) => apiGet("/products/" + id, null),
+  ordersSummary: () => apiGet("/orders/summary", null),
+  order: (id) => apiGet("/orders/" + id, null),
+  stockSummary: () => apiGet("/stock/summary", null),
+  divergences: () => apiGet("/stock/divergences", []),
+  invoicesSummary: () => apiGet("/invoices/summary", null),
+  fiscalHealth: () => apiGet("/invoices/fiscal-health", null),
+  invoice: (id) => apiGet("/invoices/" + id, null),
+  integrations: () => apiGet("/integrations", null),
+  sync: (id) => apiGet("/syncs/" + id, null),
+  reports: (period, from, to) => apiGet("/reports" + q({ period, from, to }), null),
+  notifications: (filter) => apiGet("/notifications" + q({ filter }), null),
+  notificationsSummary: () => apiGet("/notifications/summary", null),
+  settings: (tab) => apiGet("/settings/" + tab, null),
 };
+
+// Acompanha uma sincronização até terminar (GET /syncs/{id}).
+async function waitSync(syncId, tries = 30) {
+  for (let i = 0; i < tries; i++) {
+    const s = await api.sync(syncId);
+    if (s && s.status !== "em_andamento") return s;
+    await new Promise((resolve) => window.setTimeout(resolve, 600));
+  }
+  return null;
+}
+
+const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const intBR = (v) => Number(v || 0).toLocaleString("pt-BR");
+const trendText = (pct) => (pct === null || pct === undefined ? "—" : `${pct < 0 ? "↓" : "↑"} ${Math.abs(pct).toLocaleString("pt-BR")}%`);
+
+function timeAgo(iso) {
+  if (!iso) return "nunca";
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 1) return "agora";
+  if (min < 60) return `há ${min} min`;
+  if (min < 1440) return `há ${Math.floor(min / 60)} h`;
+  return `há ${Math.floor(min / 1440)} dias`;
+}
 
 /* ---------- Ícones (SVG) ---------- */
 const iconPaths = {
@@ -279,6 +388,7 @@ const iconPaths = {
   sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
   card: '<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h4"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+  copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6A1.5 1.5 0 0 0 14 4.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
 };
 
 function icon(name) {
@@ -288,7 +398,9 @@ function icon(name) {
 /* ---------- Estado da aplicação ---------- */
 const state = {
   loggedIn: false,
-  authMode: "login",
+  authMode: "login", // "login" | "register" | "forgot" (esqueci a senha) | "reset" (criar nova senha)
+  recovery: {}, // dados do "Esqueci minha senha": { email, sent, demoLink, token, checking, invalid }
+  loginNotice: "", // aviso verde no login (ex.: senha alterada)
   page: "Início",
   light: false,
   period: "Hoje",
@@ -299,6 +411,16 @@ const state = {
   settingsTab: "Empresa",
   helpQuery: "",
   helpTopic: "",
+  // Filtros das tabelas (valores enviados ao backend) e período dos relatórios.
+  productsStatus: "",
+  ordersStatus: "",
+  invoicesStatus: "",
+  reportsPeriod: "7 dias",
+  reportsFrom: "",
+  reportsTo: "",
+  notifList: null, // notificações vindas da API (null = usa os dados de exemplo)
+  unread: null,
+  demo: null, // conta Demo: { email, password, expires_at } para o card "Seus dados de acesso"
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -317,7 +439,7 @@ function pageHeader(title, subtitle, actions = "") {
   return `<header class="page-header"><div><div class="page-title">${title}</div><p>${subtitle}</p></div>${actions ? `<div class="header-actions">${actions}</div>` : ""}</header>`;
 }
 
-const accentColors = { blue: "#2f8bff", purple: "#8b5cf6", red: "#ff5672", green: "#36db9b" };
+const accentColors = { blue: "#499cff", purple: "#FFC24B", red: "#F0416C", green: "#3DDC97" };
 let uid = 0;
 
 function smoothPath(points) {
@@ -386,7 +508,7 @@ function salesChart(data, onlyFirst = false) {
   return `<div class="chart-wrap">
     <div class="y-labels">${ticks.map((t) => `<span>${formatAxis(t)}</span>`).join("")}</div>
     <svg viewBox="0 0 700 220" role="img" aria-label="Gráfico de vendas">
-      <defs><linearGradient id="${areaId}" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#2478ff" stop-opacity=".32"/><stop offset="1" stop-color="#2478ff" stop-opacity="0"/></linearGradient></defs>
+      <defs><linearGradient id="${areaId}" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#499cff" stop-opacity=".32"/><stop offset="1" stop-color="#499cff" stop-opacity="0"/></linearGradient></defs>
       <path class="grid" d="M0 25H700M0 80H700M0 135H700M0 190H700"/>
       <path class="chart-area" d="${lines[0].d} L${W},${base} L0,${base} Z" fill="url(#${areaId})"/>
       ${lines.map((s) => `<path class="line chart-line ${s.cls}" d="${s.d}" pathLength="1"/>`).join("")}
@@ -414,31 +536,121 @@ function donut(items) {
   </div>`;
 }
 
+function marketImg(name) {
+  return `<img src="${CONFIG.marketLogos[name]}" alt="${name}" loading="lazy" />`;
+}
+
 function marketplaceDots() {
-  return `<div class="market-dots" aria-label="Mercado Livre, Shopee e Magalu"><span class="ml">ML</span><span class="sh">S</span><span class="mg">M</span></div>`;
+  return `<div class="market-dots" aria-label="Mercado Livre, Shopee e Magalu"><span class="ml" title="Mercado Livre">${marketImg("Mercado Livre")}</span><span class="sh" title="Shopee">${marketImg("Shopee")}</span><span class="mg" title="Magalu">${marketImg("Magalu")}</span></div>`;
 }
 
-function filterTabs(items) {
-  return `<div class="tabs">${items.map((item, i) => `<button type="button" class="${i === 0 ? "active" : ""}">${item}</button>`).join("")}</div>`;
+/* Animação de abertura do login: cometas convergem, o logo Taylor "acende" no centro
+   e os marketplaces saem de dentro dele. Só toca na 1ª vez (state.heroPlayed). */
+function heroStage() {
+  const played = state.heroPlayed;
+  state.heroPlayed = true;
+  // se a tela de carregamento ainda está por cima, a animação espera ela sair (ver hideSplash)
+  const waiting = !played && typeof splash !== "undefined" && splash.el && !splash.el.classList.contains("hide");
+  const nodes = [
+    ["Mercado Livre", 200],
+    ["TikTok Shop", 140],
+    ["Magalu", 340],
+    ["Shopee", 40],
+  ];
+  const rx = 170, ry = 92;
+  const sparks = [[-260, -150], [250, -130], [-40, 200]];
+  const links = nodes
+    .map(([, deg], i) => {
+      const a = (deg * Math.PI) / 180;
+      const x = Math.round(rx * Math.cos(a)), y = Math.round(ry * Math.sin(a));
+      const len = Math.round(Math.hypot(x, y)), ang = ((Math.atan2(y, x) * 180) / Math.PI).toFixed(1);
+      return { x, y, len, ang, i };
+    });
+  return `<div class="taylor-stage ${played ? "done" : waiting ? "wait" : ""}" role="img" aria-label="Logo ${CONFIG.brand} conectando Mercado Livre, TikTok Shop, Magalu e Shopee">
+    ${sparks.map(([sx, sy], i) => `<i class="ts-spark" style="--sx:${sx}px;--sy:${sy}px;--r:${(Math.atan2(-sy, -sx) * 180 / Math.PI).toFixed(1)}deg;--i:${i}"></i>`).join("")}
+    <i class="ts-flash"></i><i class="ts-ring"></i><i class="ts-ring r2"></i>
+    ${links.map((l) => `<i class="ts-link" style="--len:${l.len}px;--ang:${l.ang}deg;--i:${l.i}"></i>`).join("")}
+    <span class="ts-core"><img src="${CONFIG.logo}" alt="" /></span>
+    ${links.map((l, k) => `<span class="ts-node" style="--x:${l.x}px;--y:${l.y}px;--i:${l.i}"><span class="ts-badge" style="--f:${k}">${marketImg(nodes[k][0])}</span></span>`).join("")}
+  </div>
+  <p class="ts-caption"><strong>Seu comércio, sem fronteiras</strong></p>`;
 }
 
-function dataTable(headers, rows, channelsIndex, statusIndex) {
+// items: textos simples (só destaque visual) ou [rótulo, valor] com filterKey (filtra no backend).
+function filterTabs(items, filterKey = "", active = "") {
+  return `<div class="tabs">${items
+    .map((item, i) => {
+      const [label, value] = Array.isArray(item) ? item : [item, undefined];
+      const on = filterKey ? value === active : i === 0;
+      const attrs = filterKey ? ` data-filter="${filterKey}" data-value="${value}"` : "";
+      return `<button type="button" class="${on ? "active" : ""}"${attrs}>${label}</button>`;
+    })
+    .join("")}</div>`;
+}
+
+// rowKind: "product" | "order" | "invoice" -> o botão ••• abre o detalhe da linha (id vem no fim da linha, via ?ids=1).
+function dataTable(headers, rows, channelsIndex, statusIndex, rowKind = "") {
   const body = rows
     .map((row) => {
+      const id = rowKind && row.length > headers.length ? row[headers.length] : "";
       const cells = row
+        .slice(0, headers.length)
         .map((cell, index) => {
           if (index === channelsIndex) return `<td>${marketplaceDots()}</td>`;
           if (index === statusIndex) return `<td><span class="status ${cell.toLowerCase().replaceAll(" ", "-")}">${cell}</span></td>`;
-          return `<td>${cell}</td>`;
+          return `<td>${escapeHtml(cell)}</td>`;
         })
         .join("");
-      return `<tr>${cells}<td><button class="more" type="button" aria-label="Mais ações">•••</button></td></tr>`;
+      const more = id ? ` data-row="${rowKind}" data-id="${id}"` : "";
+      return `<tr>${cells}<td><button class="more" type="button" aria-label="Mais ações"${more}>•••</button></td></tr>`;
     })
     .join("");
-  return `<div class="table-scroll card"><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}<th>Ações</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  const empty = rows.length ? "" : `<tr><td colspan="${headers.length + 1}"><div class="empty-state">${icon("check")}<strong>Nada por aqui</strong><small>Nenhum registro neste filtro.</small></div></td></tr>`;
+  return `<div class="table-scroll card"><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}<th>Ações</th></tr></thead><tbody>${body}${empty}</tbody></table></div>`;
 }
 
-function marketLogo(index, text) {
+/* Modal (usa o elemento <dialog>). O conteúdo é HTML; os botões usam data-action. */
+function openModal(title, body, actions = "") {
+  let dialog = $("#modal");
+  if (!dialog) {
+    dialog = document.createElement("dialog");
+    dialog.id = "modal";
+    dialog.className = "card modal";
+    ($("#app-shell") || document.body).appendChild(dialog);
+  }
+  dialog.innerHTML = `<div class="modal-head"><strong>${title}</strong><button type="button" data-action="close-modal" aria-label="Fechar">×</button></div>
+    <div class="modal-body">${body}</div>${actions ? `<div class="form-actions">${actions}</div>` : ""}<div class="form-error" id="modal-error" hidden></div>`;
+  if (!dialog.open) dialog.showModal();
+  return dialog;
+}
+
+function closeModal() {
+  const dialog = $("#modal");
+  if (dialog && dialog.open) dialog.close();
+}
+
+function modalError(text) {
+  const el = $("#modal-error");
+  if (el) (el.textContent = text), (el.hidden = !text);
+}
+
+// Executa uma escrita, mostra erro no modal (ou toast) e recarrega a página em caso de sucesso.
+async function runAction(method, path, body, okMessage, { reload = true, keepModal = false } = {}) {
+  const res = await apiSend(method, path, body);
+  if (!res.ok) {
+    if ($("#modal") && $("#modal").open) modalError(apiError(res));
+    else showToast(apiError(res), "error");
+    return null;
+  }
+  searchCache.data = null; // a busca do topo recarrega com os dados novos
+  if (!keepModal) closeModal();
+  if (okMessage) showToast(okMessage);
+  if (reload) await renderPage();
+  return res.data ?? {};
+}
+
+function marketLogo(index, text, name) {
+  if (name && CONFIG.marketLogos[name]) return `<span class="market-logo has-img">${marketImg(name)}</span>`;
   return `<span class="market-logo m${index}">${text}</span>`;
 }
 
@@ -458,12 +670,19 @@ function settingRow(title, desc, control) {
   return `<div class="setting-row"><div><strong>${title}</strong><small>${desc}</small></div>${control}</div>`;
 }
 
-function field(label, value, cls = "") {
-  return `<label class="field ${cls}">${label}<input value="${escapeHtml(value)}" /></label>`;
+function field(label, value, cls = "", name = "") {
+  return `<label class="field ${cls}">${label}<input ${name ? `name="${name}"` : ""} value="${escapeHtml(value ?? "")}" /></label>`;
+}
+
+// options: [[valor, rótulo], ...]
+function selectField(name, options, selected, label, cls = "select-sm") {
+  return `<select class="${cls}" name="${name}" aria-label="${label}">${options
+    .map(([v, l]) => `<option value="${v}" ${String(v) === String(selected) ? "selected" : ""}>${l}</option>`)
+    .join("")}</select>`;
 }
 
 function formActions() {
-  return `<div class="form-actions">${button("Cancelar", "ghost")}${button("Salvar alterações", "primary", 'data-action="save-settings"')}</div>`;
+  return `<div class="form-actions">${button("Cancelar", "ghost", 'data-action="cancel-settings"')}${button("Salvar alterações", "primary", 'data-action="save-settings"')}</div>`;
 }
 
 function telegramLink(label = "Abrir no Telegram", cls = "btn secondary") {
@@ -482,8 +701,39 @@ function telegramCard() {
 /* ---------- 4. TELAS ---------- */
 
 /* Login */
+/* Esqueci minha senha: "forgot" pede o link por e-mail; "reset" cria a nova senha (link #redefinir-senha=...). */
+function recoveryCard() {
+  const reset = state.authMode === "reset";
+  const r = state.recovery;
+  const submit = (label) => button(label, "primary").replace('type="button"', 'type="submit"');
+  let body;
+  if (reset && r.checking) body = `<div class="register-note">Verificando o link...</div>`;
+  else if (reset && r.invalid) body = `<div class="form-error">${escapeHtml(r.invalid)}</div>${button("Pedir um novo link", "primary", 'data-auth="forgot"')}`;
+  else if (!reset && r.sent)
+    body = `<div class="form-ok">${icon("check")}<span>${escapeHtml(r.sent)}</span></div>
+      ${r.demoLink ? `<div class="register-note">Modo demonstração: nenhum servidor de e-mail está configurado, então o link aparece aqui. <a href="${escapeHtml(r.demoLink)}">Abrir o link de redefinição</a></div>` : ""}
+      ${button("Voltar para o login", "primary", 'data-auth="login"')}`;
+  else if (reset)
+    body = `<label>Nova senha<input name="password" type="password" autocomplete="new-password" placeholder="Mínimo de 6 caracteres" /></label>
+      <label>Confirmar nova senha<input name="confirm" type="password" autocomplete="new-password" placeholder="Repita a nova senha" /></label>
+      <div class="form-error" id="login-error" hidden></div>
+      ${submit("Salvar nova senha")}`;
+  else
+    body = `<label>E-mail<input name="email" type="email" autocomplete="email" placeholder="voce@sualoja.com.br" value="${escapeHtml(r.email || "")}" /></label>
+      <div class="form-error" id="login-error" hidden></div>
+      ${submit("Enviar link")}`;
+  return `<form class="login-card" id="recovery-form" novalidate>
+      ${logo(true)}
+      <div class="title">${reset ? "Criar nova senha" : "Esqueceu sua senha?"}</div>
+      <p>${reset ? (r.email ? `Nova senha para a conta ${escapeHtml(r.email)}` : "Escolha uma nova senha para sua conta.") : "Informe o e-mail da sua conta. Enviaremos um link para você criar uma nova senha."}</p>
+      ${body}
+      <button type="button" class="link back-login" data-auth="login">← Voltar para o login</button>
+    </form>`;
+}
+
 function renderLogin() {
   const isLogin = state.authMode === "login";
+  const recovering = state.authMode === "forgot" || state.authMode === "reset";
   $("#root").innerHTML = `
   <main class="login-page">
     <div class="orb orb-one"></div><div class="orb orb-two"></div>
@@ -491,14 +741,11 @@ function renderLogin() {
       ${logo()}
       <p class="eyebrow">O hub de operação multicanal</p>
       <div class="display">Crescer em marketplaces não precisa virar um caos.</div>
-      <p>A ${CONFIG.brand} conecta seus canais, sincroniza o estoque e transforma cada pedido em uma operação pronta para faturar.</p>
-      <div class="operation-hub">
-        <span class="hub-channel hub-ml">ML</span><span class="hub-channel hub-sh">S</span><span class="hub-channel hub-mg">M</span><span class="hub-channel hub-nf">NF-e</span>
-        <div class="hub-core">${logo(true)}<strong>Seu comércio,<br />sem fronteiras</strong></div>
-      </div>
+      <p>O ${CONFIG.brand} conecta seus canais, sincroniza o estoque e transforma cada pedido em uma operação pronta para faturar.</p>
+      ${heroStage()}
       <div class="login-points"><span>✓ Estoque sem divergências</span><span>✓ NF-e em poucos cliques</span><span>✓ Todos os CNPJs em uma visão</span></div>
     </section>
-    <form class="login-card" id="login-form" novalidate>
+    ${recovering ? recoveryCard() : `<form class="login-card" id="login-form" novalidate>
       ${logo(true)}
       <div class="auth-tabs">
         <button type="button" class="${isLogin ? "active" : ""}" data-auth="login">Entrar</button>
@@ -507,29 +754,56 @@ function renderLogin() {
       <div class="title">${isLogin ? "Bem-vinda de volta" : "Comece sua operação conectada"}</div>
       <p>${isLogin ? `Acesse seu painel ${CONFIG.brand}` : "Configure sua empresa e seu primeiro canal"}</p>
       ${isLogin ? "" : `<div class="form-grid"><label>Seu nome<input name="name" placeholder="Nome completo" /></label><label>Empresa<input name="company" placeholder="Nome da sua loja" /></label></div>`}
-      <label>E-mail<input name="email" type="email" placeholder="voce@sualoja.com.br" value="isabela@lojabeta.com.br" /></label>
-      <label>Senha<input name="password" type="password" placeholder="Sua senha" value="taylor" /></label>
+      <label>E-mail<input name="email" type="email" placeholder="voce@sualoja.com.br" ${isLogin && CONFIG.local ? 'value="isabela@lojabeta.com.br"' : ""} /></label>
+      <label>Senha<input name="password" type="password" placeholder="Sua senha" ${isLogin && CONFIG.local ? 'value="taylor123"' : ""} /></label>
       ${isLogin ? "" : `<label>CNPJ<input name="cnpj" placeholder="00.000.000/0001-00" /></label>`}
       ${isLogin
-        ? `<div class="login-options"><label class="check"><input type="checkbox" checked /> Lembrar de mim</label><button type="button" class="link">Esqueci minha senha</button></div>`
+        ? `<div class="login-options"><label class="check"><input type="checkbox" name="remember" checked /> Lembrar de mim</label><button type="button" class="link" data-auth="forgot">Esqueci minha senha</button></div>`
         : `<div class="register-note">Ao continuar, você poderá importar produtos e pedidos do seu marketplace sem planilhas.</div>`}
+      ${isLogin && state.loginNotice ? `<div class="form-ok">${icon("check")}<span>${escapeHtml(state.loginNotice)}</span></div>` : ""}
       <div class="form-error" id="login-error" hidden></div>
       ${button(isLogin ? "Entrar na plataforma" : "Criar minha operação", "primary").replace('type="button"', 'type="submit"')}
+      ${isLogin && CONFIG.useApi
+        ? `<div class="demo-divider"><span>ou</span></div>
+      ${button("Entrar com a conta Demo", "secondary", 'data-action="demo-login"')}
+      <div class="demo-note">Cria uma loja de exemplo só sua, com produtos, pedidos e notas, para testar à vontade.</div>`
+        : ""}
       <small>${isLogin ? "Ambiente seguro e protegido" : "Teste a plataforma com seus dados reais"}</small>
-    </form>
+    </form>`}
   </main>`;
 }
 
 /* Dashboard */
+// Conta Demo: e-mail e senha para o /login do bot do Telegram e o horário em que a loja será apagada.
+function demoAccessCard() {
+  const d = state.demo;
+  if (!d) return "";
+  const fim = new Date(d.expires_at);
+  const hora = fim.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const quando = fim.toDateString() === new Date().toDateString() ? `às ${hora}` : `em ${fim.toLocaleDateString("pt-BR")} às ${hora}`;
+  const bot = "@" + CONFIG.telegram.split("/").pop();
+  const field = (label, value) => `<div class="demo-field">
+      <small>${label}</small><code>${escapeHtml(value)}</code>
+      ${button(`${icon("copy")}Copiar`, "ghost", `data-action="copy" data-copy="${escapeHtml(value)}" aria-label="Copiar ${label.toLowerCase()}"`)}
+    </div>`;
+  return `<article class="card demo-access">
+    <div class="card-head"><strong>Seus dados de acesso</strong><span>Loja de demonstração · apagada ${quando}</span></div>
+    <div class="demo-fields">${field("E-mail", d.email)}${field("Senha", d.password)}</div>
+    <p>No Telegram, abra o ${escapeHtml(bot)}, envie <b>/login</b> e depois o e-mail e a senha acima. Tudo o que você fizer lá aparece aqui, e vice-versa.</p>
+    ${telegramLink(`Abrir ${escapeHtml(bot)}`, "btn secondary")}
+  </article>`;
+}
+
 function dashboardShell() {
   return `
   ${pageHeader(
-    `Olá, ${currentUser.name} 👋`,
+    `Bem-vindo, ${currentUser.name}`,
     "Acompanhe sua operação em todos os canais.",
     `<div class="segmented" role="group" aria-label="Período">${periods
       .map((p) => `<button type="button" class="${p === state.period ? "on" : ""}" data-period="${p}" aria-pressed="${p === state.period}">${p}</button>`)
       .join("")}</div>`
   )}
+  ${demoAccessCard()}
   <div id="dash-stats"></div>
   <div class="dashboard-grid">
     <article class="card chart-card">
@@ -546,7 +820,7 @@ function dashboardShell() {
       <div class="donut-content" id="dash-donut"></div>
     </article>
     <article class="card alerts">
-      <div class="card-head"><strong>Alertas de estoque</strong><a role="button" tabindex="0">Ver todos</a></div>
+      <div class="card-head"><strong>Alertas de estoque</strong><a role="button" tabindex="0" data-page="Estoque">Ver todos</a></div>
       <div id="dash-alerts"></div>
     </article>
   </div>
@@ -600,12 +874,12 @@ async function loadChannels() {
     list
       .map(
         (c, i) => `<div class="channel">
-        ${marketLogo(i, c.short)}
+        ${marketLogo(i, c.short, c.name)}
         <div>
           <strong>${c.name}</strong>
           <small class="connected">● Conectado</small>
           <small>${c.products} produtos</small>
-          <small>Última sinc.: ${state.synced ? "agora" : c.lastSync}</small>
+          <small>Última sinc.: ${state.synced && !CONFIG.useApi ? "agora" : c.lastSync}</small>
         </div>
       </div>`
       )
@@ -620,63 +894,215 @@ function renderDashboard() {
 
 /* Produtos */
 async function renderProducts() {
-  const rows = await api.products();
+  const [rows, s] = await Promise.all([api.products(state.productsStatus), api.productsSummary()]);
+  const c = s || { all: 312, active: 298, low_stock: 10, out_of_stock: 4 };
+  const tabs = [
+    [`Todos (${c.all})`, ""],
+    [`Ativos (${c.active})`, "ativo"],
+    [`Estoque baixo (${c.low_stock})`, "estoque_baixo"],
+    [`Sem estoque (${c.out_of_stock})`, "sem_estoque"],
+  ];
   return (
-    pageHeader("Produtos", "Gerencie seu catálogo e as publicações nos marketplaces.", button("＋ Novo produto")) +
-    `<div class="toolbar">${filterTabs(["Todos (312)", "Ativos (298)", "Estoque baixo (10)", "Sem estoque (4)"])}<div>${button("Filtros", "secondary")}</div></div>` +
-    dataTable(["Produto", "SKU", "Estoque", "Preço", "Status", "Canais", "Atualização"], rows, 5, 4)
+    pageHeader("Produtos", "Gerencie seu catálogo e as publicações nos marketplaces.", button("＋ Novo produto", "primary", 'data-action="new-product"')) +
+    `<div class="toolbar">${filterTabs(tabs, "productsStatus", state.productsStatus)}<div>${button("Filtros", "secondary", 'data-action="soon"')}</div></div>` +
+    dataTable(["Produto", "SKU", "Estoque", "Preço", "Status", "Canais", "Atualização"], rows, 5, 4, "product")
   );
 }
 
+function productForm(p = {}) {
+  const origens = [["", "Não informada"], ["0", "0 - Nacional"], ["1", "1 - Estrangeira (importação direta)"], ["2", "2 - Estrangeira (mercado interno)"]];
+  return `<form class="fields-grid" id="product-form" data-id="${p.id || ""}">
+    <label class="field span-2">Nome<input name="name" required value="${escapeHtml(p.name || "")}" /></label>
+    <label class="field">SKU<input name="sku" required value="${escapeHtml(p.sku || "")}" /></label>
+    <label class="field">Preço (R$)<input name="price" type="number" min="0" step="0.01" required value="${p.price ?? ""}" /></label>
+    <label class="field">Estoque central<input name="stock" type="number" min="0" step="1" required value="${p.stock ?? ""}" /></label>
+    <label class="field">Estoque mínimo<input name="min_stock" type="number" min="0" step="1" required value="${p.min_stock ?? ""}" /></label>
+    <label class="field">NCM (8 dígitos)<input name="ncm" inputmode="numeric" maxlength="8" value="${escapeHtml(p.ncm || "")}" /></label>
+    <label class="field">Origem fiscal<select name="fiscal_origin">${origens
+      .map(([v, l]) => `<option value="${v}" ${(p.fiscal_origin || "") === v ? "selected" : ""}>${l}</option>`)
+      .join("")}</select></label>
+  </form>`;
+}
+
+function readProductForm() {
+  const f = new FormData($("#product-form"));
+  const text = (k) => String(f.get(k) || "").trim() || null;
+  return {
+    name: text("name"), sku: text("sku"), price: Number(f.get("price")), stock: Number(f.get("stock")),
+    min_stock: Number(f.get("min_stock")), ncm: text("ncm"), fiscal_origin: text("fiscal_origin"),
+  };
+}
+
+function newProductModal() {
+  openModal("Novo produto", productForm() + `<p class="modal-note">O produto é publicado automaticamente em todos os canais conectados.</p>`,
+    button("Cancelar", "ghost", 'data-action="close-modal"') + button("Cadastrar produto", "primary", 'data-action="save-product"'));
+}
+
+async function productModal(id) {
+  const p = await api.product(id);
+  if (!p) return showToast("Não foi possível carregar o produto.", "error");
+  openModal(`Editar produto · ${escapeHtml(p.sku)}`, productForm(p) + `<p class="modal-note">Canais: ${p.channels.join(", ") || "nenhum"}. Alterar o estoque sincroniza os canais automaticamente.</p>`,
+    button("Excluir", "ghost", `data-action="delete-product" data-id="${p.id}"`) + button("Cancelar", "ghost", 'data-action="close-modal"') +
+    button("Salvar alterações", "primary", 'data-action="save-product"'));
+}
+
+async function saveProduct() {
+  const id = $("#product-form").dataset.id;
+  const body = readProductForm();
+  await runAction(id ? "PUT" : "POST", id ? `/products/${id}` : "/products", body, id ? "Produto atualizado" : "Produto cadastrado e publicado nos canais");
+}
+
 /* Pedidos */
+const orderStatusLabels = { aguardando: "Aguardando", em_separacao: "Em separação", em_transporte: "Em transporte", entregue: "Entregue", cancelado: "Cancelado" };
+const orderNext = { aguardando: ["em_separacao", "Iniciar separação"], em_separacao: ["em_transporte", "Marcar como enviado"], em_transporte: ["entregue", "Confirmar entrega"] };
+
 async function renderOrders() {
-  const rows = await api.orders();
-  return (
-    pageHeader("Pedidos", "Acompanhe os pedidos recebidos de todos os marketplaces.", button("Filtros", "secondary") + button("Exportar", "secondary") + button("Sincronizar pedidos")) +
-    statsRow(
-      [
+  const [rows, s] = await Promise.all([api.orders(state.ordersStatus), api.ordersSummary()]);
+  const stats = s
+    ? [
+        { label: "Pedidos hoje", value: intBR(s.orders_today.value), trend: trendText(s.orders_today.trend_pct) },
+        { label: "Vendas hoje", value: brl(s.sales_today.value), trend: trendText(s.sales_today.trend_pct) },
+        { label: "Ticket médio", value: brl(s.average_ticket.value), trend: trendText(s.average_ticket.trend_pct) },
+        { label: "Pedidos pendentes", value: intBR(s.pending_orders.value), trend: `${s.by_status.aguardando} aguardando`, tone: "danger" },
+      ]
+    : [
         { label: "Pedidos hoje", value: "48", trend: "↑ 12%" },
         { label: "Vendas hoje", value: "R$ 7.320,50", trend: "↑ 18%" },
         { label: "Ticket médio", value: "R$ 152,50", trend: "↑ 5%" },
         { label: "Pedidos pendentes", value: "30", trend: "↓ 8%", tone: "danger" },
-      ],
-      "four"
+      ];
+  const tabs = [["Todos", ""], ["Aguardando", "aguardando"], ["Em separação", "em_separacao"], ["Em transporte", "em_transporte"], ["Entregues", "entregue"], ["Cancelados", "cancelado"]];
+  return (
+    pageHeader(
+      "Pedidos",
+      "Acompanhe os pedidos recebidos de todos os marketplaces.",
+      button("Filtros", "secondary", 'data-action="soon"') + button("Exportar", "secondary", 'data-action="export-orders"') + button("Sincronizar pedidos", "primary", 'data-action="sync" data-path="/orders/sync"')
     ) +
-    `<div class="toolbar">${filterTabs(["Todos", "Aguardando", "Em separação", "Em transporte", "Entregues", "Cancelados"])}</div>` +
-    dataTable(["Pedido", "Canal", "Data", "Cliente", "Itens", "Valor", "Status"], rows, undefined, 6)
+    statsRow(stats, "four") +
+    `<div class="toolbar">${filterTabs(tabs, "ordersStatus", state.ordersStatus)}</div>` +
+    dataTable(["Pedido", "Canal", "Data", "Cliente", "Itens", "Valor", "Status"], rows, undefined, 6, "order")
   );
+}
+
+async function orderModal(id) {
+  const o = await api.order(id);
+  if (!o) return showToast("Não foi possível carregar o pedido.", "error");
+  const next = orderNext[o.status];
+  const invoice = o.invoice ? `${o.invoice.number ? "NF-e " + o.invoice.number : "Rascunho"} · ${o.invoice.status.replace("_", " ")}` : "Sem nota fiscal";
+  const actions =
+    (["aguardando", "em_separacao"].includes(o.status) ? button("Cancelar pedido", "ghost", `data-action="order-status" data-id="${o.id}" data-status="cancelado"`) : "") +
+    (next ? button(next[1], "primary", `data-action="order-status" data-id="${o.id}" data-status="${next[0]}"`) : "");
+  openModal(
+    `Pedido ${escapeHtml(o.code)}`,
+    `<div class="detail-grid">
+      <span>Canal<b>${escapeHtml(o.channel)}</b></span><span>Cliente<b>${escapeHtml(o.customer || "—")}${o.customer_uf ? " · " + o.customer_uf : ""}</b></span>
+      <span>Data<b>${new Date(o.date).toLocaleString("pt-BR")}</b></span><span>Status<b><span class="status ${orderStatusLabels[o.status].toLowerCase().replaceAll(" ", "-")}">${orderStatusLabels[o.status]}</span></b></span>
+      <span>Nota fiscal<b>${invoice}</b></span><span>Total<b>${brl(o.total)}</b></span>
+    </div>
+    <div class="modal-list">${o.items.map((i) => `<div><span>${escapeHtml(i.product)}<small>${escapeHtml(i.sku)}</small></span><span>${i.quantity} × ${brl(i.unit_price)}</span></div>`).join("")}</div>
+    ${o.status === "cancelado" ? "" : `<p class="modal-note">Cancelar devolve os itens ao estoque central e sincroniza os canais.</p>`}`,
+    actions || button("Fechar", "secondary", 'data-action="close-modal"')
+  );
+}
+
+async function exportOrders() {
+  const rows = await api.orders(state.ordersStatus);
+  const header = ["Pedido", "Canal", "Data", "Cliente", "Itens", "Valor", "Status"];
+  const csv = [header, ...rows.map((r) => r.slice(0, header.length))].map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(";")).join("\n");
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+  link.download = `pedidos-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  showToast(`${rows.length} pedidos exportados em CSV`);
 }
 
 /* Estoque */
 async function renderStock() {
-  const rows = await api.stock();
+  const [rows, s] = await Promise.all([api.stock(), api.stockSummary()]);
+  const c = s || { products: 312, units_available: 4860, low_stock: 8, out_of_stock: 4, divergences: 2 };
+  const banner = c.divergences
+    ? `<div class="stock-banner card"><div><span class="banner-icon">!</span><div><strong>${c.divergences} ${c.divergences === 1 ? "divergência precisa" : "divergências precisam"} da sua atenção</strong><small>As quantidades publicadas diferem do seu estoque central.</small></div></div>${button("Revisar divergências", "secondary", 'data-action="review-divergences"')}</div>`
+    : "";
   return (
-    pageHeader("Estoque", "Visão centralizada e sincronização por canal.", button("↻ Sincronizar estoque")) +
-    `<div class="stock-banner card"><div><span class="banner-icon">!</span><div><strong>2 divergências precisam da sua atenção</strong><small>As quantidades publicadas diferem do seu estoque central.</small></div></div>${button("Revisar divergências", "secondary")}</div>` +
+    pageHeader("Estoque", "Visão centralizada e sincronização por canal.", button("↻ Sincronizar estoque", "primary", 'data-action="sync" data-path="/stock/sync"')) +
+    banner +
     statsRow(
       [
-        { label: "Produtos cadastrados", value: "312", trend: "100% catalogados" },
-        { label: "Unidades disponíveis", value: "4.860", trend: "↑ 6% este mês" },
-        { label: "Estoque baixo", value: "8", trend: "Atenção necessária", tone: "danger" },
-        { label: "Sem estoque", value: "4", trend: "Reposição pendente", tone: "danger" },
+        { label: "Produtos cadastrados", value: intBR(c.products), trend: "100% catalogados" },
+        { label: "Unidades disponíveis", value: intBR(c.units_available), trend: "no estoque central" },
+        { label: "Estoque baixo", value: intBR(c.low_stock), trend: c.low_stock ? "Atenção necessária" : "Tudo certo", tone: "danger" },
+        { label: "Sem estoque", value: intBR(c.out_of_stock), trend: c.out_of_stock ? "Reposição pendente" : "Tudo certo", tone: "danger" },
       ],
       "four"
     ) +
-    dataTable(["Produto", "SKU", "Estoque central", "Estoque mínimo", "Mercado Livre", "Shopee", "Magalu", "Status"], rows, undefined, 7)
+    dataTable(["Produto", "SKU", "Estoque central", "Estoque mínimo", "Mercado Livre", "Shopee", "Magalu", "TikTok Shop", "Status"], rows, undefined, 8)
   );
+}
+
+async function divergencesModal() {
+  const list = await api.divergences();
+  if (!list.length) return showToast("Nenhuma divergência no momento");
+  openModal(
+    "Revisar divergências",
+    `<p class="modal-note">Escolha qual quantidade deve prevalecer. O Taylor atualiza o estoque central e envia o valor a todos os canais.</p>
+    ${list
+      .map(
+        (d) => `<div class="divergence">
+        <div><strong>${escapeHtml(d.product)}</strong><small>${escapeHtml(d.sku)}</small></div>
+        <div class="row-actions">
+          ${button(`Central: ${d.central_stock}`, "primary", `data-action="resolve" data-id="${d.product_id}" data-source="central"`)}
+          ${d.channels
+            .filter((c) => c.published_stock !== d.central_stock)
+            .map((c) => button(`${escapeHtml(c.channel)}: ${c.published_stock}`, "secondary", `data-action="resolve" data-id="${d.product_id}" data-source="channel" data-integration="${c.integration_id}"`))
+            .join("")}
+        </div>
+      </div>`
+      )
+      .join("")}`
+  );
+}
+
+// Dispara uma sincronização (202), acompanha até terminar e recarrega a tela.
+async function startSync(path, btn) {
+  if (state.syncing) return;
+  state.syncing = true;
+  if (btn) (btn.disabled = true), (btn.dataset.label = btn.innerHTML), (btn.innerHTML = `<span class="spin">${icon("refresh")}</span>Sincronizando...`);
+  const res = await apiSend("POST", path);
+  let s = null;
+  if (res.ok) s = await waitSync(res.data.sync_id);
+  state.syncing = false;
+  if (btn && btn.isConnected) (btn.disabled = false), (btn.innerHTML = btn.dataset.label);
+  if (!res.ok) return showToast(apiError(res), "error");
+  if (!s || s.status === "erro") return showToast("A sincronização falhou. Tente novamente.", "error");
+  const parts = [];
+  if (s.tipo !== "pedidos") parts.push(`${s.items_updated} produtos atualizados`);
+  if (["completa", "pedidos"].includes(s.tipo)) parts.push(`${s.new_orders} ${s.new_orders === 1 ? "pedido novo" : "pedidos novos"}`);
+  showToast("Sincronização concluída: " + parts.join(" · "));
+  state.synced = true;
+  refreshBadge();
+  await renderPage();
 }
 
 /* Notas fiscais */
 async function renderInvoices() {
-  const rows = await api.invoices();
+  const [rows, s, health] = await Promise.all([api.invoices(state.invoicesStatus), api.invoicesSummary(), api.fiscalHealth()]);
+  const c = s || { ready_to_invoice: 18, issued_today: 42, awaiting: 18, processing: 2, rejected: 1, avg_issue_seconds: 38, rejections_avoided: 7 };
+  const h = health || {
+    score: 96, label: "Excelente", rules_checked: 23,
+    items: [{ ok: true, text: "NCM preenchido em 308 produtos", value: "99%" }, { ok: true, text: "Certificado A1 válido", value: "214 dias" }, { ok: false, text: "4 produtos sem origem fiscal", value: "Corrigir" }],
+  };
+  const tabs = [["Todas", ""], [`Aguardando emissão (${c.awaiting})`, "aguardando_emissao"], [`Processando (${c.processing})`, "processando"], ["Autorizadas", "autorizada"], [`Rejeitadas (${c.rejected})`, "rejeitada"]];
+  const tempo = c.avg_issue_seconds >= 120 ? `${Math.round(c.avg_issue_seconds / 60)} min` : `${c.avg_issue_seconds} seg`;
+  const pronto = c.ready_to_invoice;
   return (
-    pageHeader("Notas fiscais", "Emita, valide e acompanhe suas NF-e sem sair da operação.", button("Importar XML", "secondary") + button("＋ Emitir nota fiscal")) +
+    pageHeader("Notas fiscais", "Emita, valide e acompanhe suas NF-e sem sair da operação.", button("Importar XML", "secondary", 'data-action="soon"') + button("＋ Emitir nota fiscal", "primary", 'data-action="emit-invoice"')) +
     `<article class="fiscal-hero card">
       <div>
         <span class="fiscal-kicker">Motor fiscal ${CONFIG.brand}</span>
-        <div class="fiscal-title">18 pedidos prontos para faturar</div>
+        <div class="fiscal-title">${pronto} ${pronto === 1 ? "pedido pronto" : "pedidos prontos"} para faturar</div>
         <p>Dados do pedido, cliente e tributação já conferidos. Emita as notas em lote e devolva o XML automaticamente para cada marketplace.</p>
-        <div class="fiscal-actions">${button("Emitir 18 NF-e em lote")}${button("Revisar pedidos", "secondary")}</div>
+        <div class="fiscal-actions">${button(`Emitir ${pronto} NF-e em lote`, "primary", `data-action="emit-batch" ${pronto ? "" : "disabled"}`)}${button("Revisar pedidos", "secondary", 'data-filter="invoicesStatus" data-value="aguardando_emissao"')}</div>
       </div>
       <div class="fiscal-flow">
         <div><span>01</span><strong>Pedido recebido</strong><small>Dados importados</small></div><i>→</i>
@@ -686,101 +1112,224 @@ async function renderInvoices() {
     </article>` +
     statsRow(
       [
-        { label: "Emitidas hoje", value: "42", trend: "100% sincronizadas" },
-        { label: "Aguardando emissão", value: "18", trend: "Prontas para faturar" },
-        { label: "Tempo médio", value: "38 seg", trend: "↓ 12% na emissão" },
-        { label: "Rejeições evitadas", value: "7", trend: "Validação inteligente" },
+        { label: "Emitidas hoje", value: intBR(c.issued_today), trend: "XML enviado aos canais" },
+        { label: "Aguardando emissão", value: intBR(c.awaiting), trend: "Prontas para faturar" },
+        { label: "Tempo médio", value: tempo, trend: "do pedido à autorização" },
+        { label: "Rejeições evitadas", value: intBR(c.rejections_avoided), trend: "Validação inteligente" },
       ],
       "four"
     ) +
     `<div class="fiscal-insights">
       <article class="card fiscal-readiness">
         <div class="card-head"><strong>Saúde fiscal da operação</strong><span>Atualizado agora</span></div>
-        <div class="readiness-score"><strong>96</strong><span>/100</span><div><b>Excelente</b><small>Seus cadastros estão prontos para emissão.</small></div></div>
+        <div class="readiness-score"><strong>${h.score}</strong><span>/100</span><div><b>${h.label}</b><small>${h.score >= 90 ? "Seus cadastros estão prontos para emissão." : "Corrija os itens abaixo para evitar rejeições."}</small></div></div>
         <div class="readiness-items">
-          <span><i class="ok">✓</i>NCM preenchido em 308 produtos <b>99%</b></span>
-          <span><i class="ok">✓</i>Certificado A1 válido <b>214 dias</b></span>
-          <span><i class="warn">!</i>4 produtos sem origem fiscal <b>Corrigir</b></span>
+          ${h.items.map((i) => `<span><i class="${i.ok ? "ok" : "warn"}">${i.ok ? "✓" : "!"}</i>${escapeHtml(i.text)} <b>${escapeHtml(i.value)}</b></span>`).join("")}
         </div>
       </article>
       <article class="card rejection-guard">
         <div class="card-head"><strong>Guardião de rejeições</strong><span class="connected">● Ativo</span></div>
-        <p>A plataforma confere 23 regras antes de enviar cada NF-e à SEFAZ.</p>
+        <p>A plataforma confere ${h.rules_checked} regras antes de enviar cada NF-e à SEFAZ.</p>
         <div class="guard-rule"><span>✓</span><div><strong>Cadastro do destinatário</strong><small>CPF/CNPJ e endereço validados</small></div></div>
         <div class="guard-rule"><span>✓</span><div><strong>Tributação por UF</strong><small>CFOP sugerido conforme destino</small></div></div>
         <div class="guard-rule"><span>✓</span><div><strong>Conciliação automática</strong><small>XML devolvido ao pedido e ao canal</small></div></div>
       </article>
     </div>
-    <div class="toolbar fiscal-toolbar">${filterTabs(["Todas", "Aguardando emissão (18)", "Processando (2)", "Autorizadas", "Rejeitadas (1)"])}${button("Exportar XMLs", "secondary")}</div>` +
-    dataTable(["Nota", "Pedido", "Canal", "Cliente", "Valor", "Status", "Emissão"], rows, undefined, 5)
+    <div class="toolbar fiscal-toolbar">${filterTabs(tabs, "invoicesStatus", state.invoicesStatus)}${button("Exportar XMLs", "secondary", 'data-action="soon"')}</div>` +
+    dataTable(["Nota", "Pedido", "Canal", "Cliente", "Valor", "Status", "Emissão"], rows, undefined, 5, "invoice")
   );
 }
 
+const invoiceStatusLabels = { aguardando_emissao: "Aguardando emissão", processando: "Processando", autorizada: "Autorizada", rejeitada: "Rejeitada" };
+
+async function invoiceModal(id) {
+  const n = await api.invoice(id);
+  if (!n) return showToast("Não foi possível carregar a nota.", "error");
+  const label = invoiceStatusLabels[n.status];
+  const issues = n.pending_issues.length
+    ? `<div class="modal-issues"><strong>Pendências da validação fiscal</strong>${n.pending_issues.map((p) => `<span>! ${escapeHtml(p)}</span>`).join("")}</div>`
+    : "";
+  const reason = n.rejection_reason ? `<div class="modal-issues"><strong>Motivo informado pela SEFAZ</strong><span>${escapeHtml(n.rejection_reason)}</span><small>Corrija o cadastro do produto ou do destinatário e reenvie.</small></div>` : "";
+  const actions =
+    n.status === "aguardando_emissao"
+      ? button("Emitir NF-e", "primary", `data-action="invoice-emit" data-id="${n.id}"`)
+      : n.status === "rejeitada"
+        ? button("Reenviar à SEFAZ", "primary", `data-action="invoice-resend" data-id="${n.id}"`)
+        : button("Fechar", "secondary", 'data-action="close-modal"');
+  openModal(
+    `${n.number || "Rascunho"} · pedido ${escapeHtml(n.order)}`,
+    `<div class="detail-grid">
+      <span>Canal<b>${escapeHtml(n.channel)}</b></span><span>Cliente<b>${escapeHtml(n.customer)}</b></span>
+      <span>Valor<b>${brl(n.value)}</b></span><span>Status<b><span class="status ${label.toLowerCase().replaceAll(" ", "-")}">${label}</span></b></span>
+      <span>Emissão<b>${n.issued_at ? new Date(n.issued_at).toLocaleString("pt-BR") : "—"}</b></span><span>XML<b>${n.xml_url ? "Enviado ao pedido e ao canal" : "—"}</b></span>
+    </div>${reason}${issues}<p class="modal-note">Emissão simulada: nenhuma nota é enviada à SEFAZ real.</p>`,
+    actions
+  );
+}
+
+async function emitInvoiceModal() {
+  const rows = await api.invoices("aguardando_emissao");
+  const list = rows.filter((r) => r.length > 7);
+  if (!list.length) return showToast("Nenhum pedido aguardando emissão");
+  openModal(
+    "Emitir nota fiscal",
+    `<p class="modal-note">Escolha o pedido. A validação fiscal roda antes do envio à SEFAZ (simulada).</p>
+    <div class="modal-list">${list
+      .map((r) => `<div><span>Pedido ${escapeHtml(r[1])}<small>${escapeHtml(r[2])} · ${escapeHtml(r[3])} · ${escapeHtml(r[4])}</small></span>${button("Emitir", "secondary", `data-action="invoice-emit" data-id="${r[7]}"`)}</div>`)
+      .join("")}</div>`
+  );
+}
+
+// Emite (ou reenvia) e acompanha o retorno da SEFAZ simulada.
+async function emitInvoice(id, resend = false) {
+  const data = await runAction("POST", `/invoices/${id}/${resend ? "resend" : "emit"}`, undefined, null, { reload: false, keepModal: true });
+  if (!data) return;
+  closeModal();
+  showToast(`NF-e ${data.number || ""} enviada à SEFAZ (simulada)...`);
+  window.setTimeout(async () => {
+    const n = await api.invoice(id);
+    if (n) showToast(n.status === "autorizada" ? `${n.number} autorizada · XML devolvido ao canal` : `${n.number} ${invoiceStatusLabels[n.status].toLowerCase()}`, n.status === "rejeitada" ? "error" : "ok");
+    refreshBadge();
+    renderPage();
+  }, 2600);
+}
+
 /* Marketplaces e Integrações */
+const MARKETPLACES = ["Mercado Livre", "Shopee", "Magalu", "TikTok Shop"];
+
 async function renderMarketplaces(integrations = false) {
-  const base = await api.marketplaces();
-  const list = integrations ? [...base, ["Telegram", icon("telegram"), "Atendimento", "Ativo", "Agora"]] : base;
-  const cards = list
-    .map((m, index) =>
-      integrations
-        ? `<article class="card integration">
-            ${marketLogo(index, m[1])}
-            <div class="integration-name"><strong>${m[0]}</strong><small class="connected">● Conectado</small></div>
-            <div><small>Conta vinculada</small><strong>${m[0] === "Telegram" ? "@lojabeta_bot" : "Loja Beta Oficial"}</strong></div>
-            <div><small>Última sincronização</small><strong>Há ${index + 2} min</strong></div>
-            <div class="row-actions">${button("Configurar", "secondary")}${button("Reconectar", "ghost")}${button("Desconectar", "ghost")}</div>
+  const [base, integ] = await Promise.all([api.marketplaces(), api.integrations()]);
+  const byName = Object.fromEntries((integ || []).map((i) => [i.name, i]));
+  const lastSync = (name, index) => (byName[name] ? timeAgo(byName[name].last_sync) : `há ${index + 2} min`);
+  let cards;
+  if (integrations) {
+    const list = integ || [...base.map((m) => ({ name: m[0], short: m[1], type: "marketplace", status: "conectado", account: "Loja Beta Oficial" })), { name: "Telegram", type: "atendimento", status: "conectado", account: "@lojabeta_bot" }];
+    cards = list
+      .map((m, index) => {
+        const on = m.status === "conectado";
+        const acoes = !m.id
+          ? ""
+          : on
+            ? (m.type === "marketplace" ? button("Configurar", "secondary", 'data-action="soon"') + button("Reconectar", "ghost", `data-action="reconnect" data-id="${m.id}"`) : "") +
+              button("Desconectar", "ghost", `data-action="disconnect" data-id="${m.id}" data-name="${escapeHtml(m.name)}"`)
+            : m.type === "marketplace" ? button("Conectar", "primary", `data-action="reconnect" data-id="${m.id}"`) : "";
+        return `<article class="card integration">
+            ${marketLogo(index, m.short || icon("telegram"), m.name)}
+            <div class="integration-name"><strong>${m.name}</strong><small class="${on ? "connected" : "down"}">● ${on ? "Conectado" : "Desconectado"}</small></div>
+            <div><small>Conta vinculada</small><strong>${escapeHtml(m.account || "—")}</strong></div>
+            <div><small>Última sincronização</small><strong>${m.type === "atendimento" ? "Tempo real" : timeAgo(m.last_sync)}</strong></div>
+            <div class="row-actions">${acoes}</div>
+          </article>`;
+      })
+      .join("");
+  } else {
+    cards = base
+      .map(
+        (m, index) => `<article class="card marketplace-card">
+            <div class="market-title">${marketLogo(index, m[1], m[0])}<div><strong>${m[0]}</strong><small class="connected">● Conectado</small></div></div>
+            <div class="market-metrics"><div><small>Produtos publicados</small><strong>${m[2]}</strong></div><div><small>Pedidos hoje</small><strong>${m[3]}</strong></div><div><small>Vendas hoje</small><strong>${m[4]}</strong></div></div>
+            <div class="sync-note">Última sincronização ${lastSync(m[0], index)}</div>
+            <div class="row-actions">${button("Gerenciar", "secondary", 'data-page="Integrações"')}${
+              byName[m[0]] ? button("↻ Sincronizar", "primary", `data-action="sync" data-path="/integrations/${byName[m[0]].id}/sync"`) : button("↻ Sincronizar")
+            }</div>
           </article>`
-        : `<article class="card marketplace-card">
-            <div class="market-title">${marketLogo(index, m[1])}<div><strong>${m[0]}</strong><small class="connected">● Conectado</small></div></div>
-            <div class="market-metrics"><div><small>Produtos publicados</small><strong>${m[2]}</strong></div><div><small>Pedidos</small><strong>${m[3]}</strong></div><div><small>Vendas</small><strong>${m[4]}</strong></div></div>
-            <div class="sync-note">Última sincronização há ${index + 2} minutos</div>
-            <div class="row-actions">${button("Gerenciar", "secondary")}${button("↻ Sincronizar")}</div>
-          </article>`
-    )
-    .join("");
+      )
+      .join("");
+  }
   return (
     pageHeader(
       integrations ? "Integrações" : "Marketplaces",
       integrations ? "Conecte os serviços que fazem sua operação acontecer." : "Gerencie seus canais de venda em um só lugar.",
-      integrations ? "" : button("＋ Conectar canal")
+      integrations ? "" : button("＋ Conectar canal", "primary", 'data-action="connect-modal"')
     ) + `<div class="${integrations ? "integration-list" : "marketplace-grid"}">${cards}</div>`
+  );
+}
+
+async function connectModal() {
+  const integ = (await api.integrations()) || [];
+  const connected = new Set(integ.filter((i) => i.status === "conectado").map((i) => i.name));
+  const free = MARKETPLACES.filter((m) => !connected.has(m));
+  if (!free.length) return showToast("Todos os canais disponíveis já estão conectados");
+  openModal(
+    "Conectar canal",
+    `<p class="modal-note">No MVP a autorização com a conta de vendedor é simulada: o canal conecta na hora e o catálogo é publicado.</p>
+    <div class="modal-list">${free.map((m, i) => `<div><span class="connect-channel">${marketLogo(i, "", m)}<b>${m}</b></span>${button("Conectar", "primary", `data-action="connect" data-name="${m}"`)}</div>`).join("")}</div>`
   );
 }
 
 /* Relatórios */
 async function renderReports() {
-  const [sales, prods] = await Promise.all([api.sales("7 dias"), api.products()]);
-  const bars = [["Mercado Livre", "55%"], ["Shopee", "28%"], ["Magalu", "17%"]];
-  return (
-    pageHeader(
-      "Relatórios",
-      "Transforme os dados da sua operação em decisões.",
-      `<div class="segmented" role="group">${["7 dias", "30 dias", "3 meses", "Personalizado"].map((p, i) => `<button type="button" class="${i === 0 ? "on" : ""}">${p}</button>`).join("")}</div>`
-    ) +
-    statsRow(
-      [
+  const p = state.reportsPeriod;
+  const custom = p === "Personalizado";
+  const r = custom && !(state.reportsFrom && state.reportsTo) ? null : await api.reports(custom ? "custom" : p, state.reportsFrom, state.reportsTo);
+  const s = r && r.summary;
+  const stats = s
+    ? [
+        { label: "Vendas totais", value: brl(s.total_sales.value), trend: trendText(s.total_sales.trend_pct) },
+        { label: "Pedidos", value: intBR(s.orders.value), trend: trendText(s.orders.trend_pct) },
+        { label: "Ticket médio", value: brl(s.average_ticket.value), trend: trendText(s.average_ticket.trend_pct) },
+        { label: "Produtos vendidos", value: intBR(s.products_sold.value), trend: trendText(s.products_sold.trend_pct) },
+      ]
+    : [
         { label: "Vendas totais", value: "R$ 38.420", trend: "↑ 18,4%" },
         { label: "Pedidos", value: "284", trend: "↑ 12,1%" },
         { label: "Ticket médio", value: "R$ 135,28", trend: "↑ 5,2%" },
         { label: "Produtos vendidos", value: "712", trend: "↑ 8,7%" },
-      ],
-      "four"
+      ];
+  const evo = r ? r.sales_evolution : null;
+  const maxEvo = evo ? Math.max(...evo.values, 0) : 0;
+  const chart = evo
+    ? { labels: evo.labels, yMax: Math.max(300, Math.ceil(maxEvo / 3 / 100) * 300), series: [{ name: "Vendas", cls: "blue", values: evo.values }] }
+    : await api.sales("7 dias");
+  const bars = r ? r.sales_by_marketplace.map((b) => [b.name, b.share_pct + "%"]) : [["Mercado Livre", "55%"], ["Shopee", "28%"], ["Magalu", "17%"]];
+  const top = r ? r.top_products : [];
+  const periodLabel = custom ? (r ? `${state.reportsFrom.split("-").reverse().join("/")} a ${state.reportsTo.split("-").reverse().join("/")}` : "Escolha as datas") : p === "3 meses" ? "Últimos 3 meses" : `Últimos ${p}`;
+  const customForm = custom
+    ? `<form class="card report-custom" id="report-custom"><label class="field">De<input type="date" name="from" value="${state.reportsFrom}" required /></label><label class="field">Até<input type="date" name="to" value="${state.reportsTo}" required /></label>${button("Aplicar", "primary").replace('type="button"', 'type="submit"')}</form>`
+    : "";
+  return (
+    pageHeader(
+      "Relatórios",
+      "Transforme os dados da sua operação em decisões.",
+      `<div class="segmented" role="group">${["7 dias", "30 dias", "3 meses", "Personalizado"].map((x) => `<button type="button" class="${x === p ? "on" : ""}" data-report-period="${x}">${x}</button>`).join("")}</div>`
     ) +
+    customForm +
+    statsRow(stats, "four") +
     `<div class="reports-grid">
-      <article class="card report-main"><div class="card-head"><strong>Evolução das vendas</strong><span>Últimos 7 dias</span></div>${salesChart(sales, true)}</article>
+      <article class="card report-main"><div class="card-head"><strong>Evolução das vendas</strong><span>${periodLabel}</span></div>${salesChart(chart, true)}</article>
       <article class="card"><div class="card-head"><strong>Vendas por marketplace</strong></div>
         <div class="bar-list">${bars.map(([name, value]) => `<div><span>${name}<b>${value}</b></span><i><em style="width:${value}"></em></i></div>`).join("")}</div>
       </article>
       <article class="card report-products"><div class="card-head"><strong>Produtos mais vendidos</strong></div>
-        ${prods.slice(0, 4).map((item, index) => `<div><b>0${index + 1}</b><span>${item[0]}<small>${32 - index * 5} unidades</small></span><strong>R$ ${(2490 - index * 310).toLocaleString("pt-BR")}</strong></div>`).join("")}
+        ${top.length
+          ? top.map((t) => `<div><b>0${t.position}</b><span>${escapeHtml(t.name)}<small>${t.units} unidades</small></span><strong>${brl(t.revenue)}</strong></div>`).join("")
+          : `<div class="empty-state">${icon("chart")}<strong>Sem vendas</strong><small>Nenhuma venda no período.</small></div>`}
       </article>
     </div>`
   );
 }
 
 /* Notificações */
+function notifSource() {
+  return state.notifList || notifications;
+}
+
 function unreadCount() {
-  return notifications.filter((n) => n.unread).length;
+  return state.unread ?? notifications.filter((n) => n.unread).length;
+}
+
+// Atualiza o contador de não lidas (sidebar e sino) com o backend.
+async function refreshBadge() {
+  const s = await api.notificationsSummary();
+  if (s) state.unread = s.unread;
+  updateNotifications(false);
+}
+
+const notifFilterValue = { Todas: "todas", "Não lidas": "nao_lidas", Pedidos: "pedidos", Estoque: "estoque", Fiscal: "fiscal", Integrações: "integracoes" };
+
+async function loadNotifications() {
+  const list = await api.notifications("todas");
+  if (list) state.notifList = list;
 }
 
 function notificationItem(n) {
@@ -794,7 +1343,7 @@ function notificationItem(n) {
 
 function notificationPanel() {
   const f = state.notifFilter;
-  const list = notifications.filter((n) => f === "Todas" || (f === "Não lidas" ? n.unread : n.type === f));
+  const list = notifSource().filter((n) => f === "Todas" || (f === "Não lidas" ? n.unread : n.type === f));
   const tabs = notifFilters
     .map((t) => `<button type="button" class="${t === f ? "active" : ""}" data-notif-filter="${t}">${t}${t === "Não lidas" ? ` (${unreadCount()})` : ""}</button>`)
     .join("");
@@ -804,9 +1353,9 @@ function notificationPanel() {
   return `<div class="toolbar"><div class="tabs">${tabs}</div></div>${items}`;
 }
 
-function updateNotifications() {
+function updateNotifications(redrawPanel = true) {
   const panel = $("#notif-panel");
-  if (panel) panel.innerHTML = notificationPanel();
+  if (panel && redrawPanel) panel.innerHTML = notificationPanel();
   const count = unreadCount();
   const badge = $("#notif-badge");
   if (badge) {
@@ -818,12 +1367,33 @@ function updateNotifications() {
 }
 
 function markRead(id) {
-  const n = notifications.find((item) => item.id === Number(id));
-  if (n) n.unread = false;
+  const n = notifSource().find((item) => String(item.id) === String(id));
+  if (n && n.unread) {
+    n.unread = false;
+    if (state.unread) state.unread -= 1;
+    if (state.notifList) apiSend("PATCH", `/notifications/${id}/read`);
+  }
   updateNotifications();
 }
 
-function renderNotifications() {
+async function renderNotifications() {
+  const [, s, prefs] = await Promise.all([loadNotifications(), api.notificationsSummary(), api.settings("preferences")]);
+  if (s) state.unread = s.unread;
+  const alerts = prefs ? prefs.alerts : { telegram: true, email: true, push: false, daily_summary: true };
+  const stats = s
+    ? [
+        { label: "Recebidas hoje", value: intBR(s.received_today), trend: `${s.unread} não lidas`, icon: "bell", accent: "blue" },
+        { label: "Alertas críticos", value: intBR(s.critical), trend: s.critical ? "Estoque e fiscal" : "Nenhum pendente", icon: "alert", accent: "red", tone: "danger", spark: sparkRed },
+        { label: "Novos pedidos", value: intBR(s.new_orders), trend: "hoje", icon: "cart", accent: "purple" },
+        { label: "Entregues no Telegram", value: intBR(s.delivered_telegram), trend: "envio pelo bot", icon: "telegram", accent: "green", spark: sparkFlat },
+      ]
+    : [
+        { label: "Recebidas hoje", value: "12", trend: "↑ 4 desde ontem", icon: "bell", accent: "blue" },
+        { label: "Alertas críticos", value: "2", trend: "Estoque e fiscal", icon: "alert", accent: "red", tone: "danger", spark: sparkRed },
+        { label: "Novos pedidos", value: "48", trend: "↑ 12%", icon: "cart", accent: "purple" },
+        { label: "Entregues no Telegram", value: "126", trend: "100% entregues", icon: "telegram", accent: "green", spark: sparkFlat },
+      ];
+  window.setTimeout(() => updateNotifications(false));
   return (
     pageHeader(
       "Notificações",
@@ -831,24 +1401,16 @@ function renderNotifications() {
       button(`${icon("check")}Marcar todas como lidas`, "secondary", 'data-action="read-all"') +
         button(`${icon("gear")}Preferências`, "primary", 'data-page="Configurações" data-settings-tab="Notificações"')
     ) +
-    statsRow(
-      [
-        { label: "Recebidas hoje", value: "12", trend: "↑ 4 desde ontem", icon: "bell", accent: "blue" },
-        { label: "Alertas críticos", value: "2", trend: "Estoque e fiscal", icon: "alert", accent: "red", tone: "danger", spark: sparkRed },
-        { label: "Novos pedidos", value: "48", trend: "↑ 12%", icon: "cart", accent: "purple" },
-        { label: "Entregues no Telegram", value: "126", trend: "100% entregues", icon: "telegram", accent: "green", spark: sparkFlat },
-      ],
-      "four"
-    ) +
+    statsRow(stats, "four") +
     `<div class="notif-layout">
       <article class="card notif-panel" id="notif-panel">${notificationPanel()}</article>
       <div class="side-stack">
         <article class="card">
           <div class="card-head"><strong>Onde receber alertas</strong></div>
-          ${settingRow("Telegram", "Vinculado a @lojabeta_bot", toggle(true, "Receber no Telegram"))}
-          ${settingRow("E-mail", "contato@lojabeta.com.br", toggle(true, "Receber por e-mail"))}
-          ${settingRow("Navegador", "Notificações push neste dispositivo", toggle(false, "Receber no navegador"))}
-          ${settingRow("Resumo diário", "Todos os dias às 08h", toggle(true, "Receber resumo diário"))}
+          ${settingRow("Telegram", "Alertas pelo bot do Telegram", toggle(alerts.telegram, "Receber no Telegram", 'data-alert="telegram"'))}
+          ${settingRow("E-mail", "No e-mail de contato da empresa", toggle(alerts.email, "Receber por e-mail", 'data-alert="email"'))}
+          ${settingRow("Navegador", "Notificações push neste dispositivo", toggle(alerts.push, "Receber no navegador", 'data-alert="push"'))}
+          ${settingRow("Resumo diário", "Todos os dias às 08h", toggle(alerts.daily_summary, "Receber resumo diário", 'data-alert="daily_summary"'))}
         </article>
         ${telegramCard()}
       </div>
@@ -857,50 +1419,75 @@ function renderNotifications() {
 }
 
 /* Configurações */
-function settingsPanel() {
+const REGIMES = [["simples_nacional", "Simples Nacional"], ["lucro_presumido", "Lucro Presumido"], ["lucro_real", "Lucro Real"]];
+const IDIOMAS = [["pt-BR", "Português (Brasil)"], ["en", "English"], ["es", "Español"]];
+const FUSOS = [["America/Sao_Paulo", "Brasília (GMT-3)"], ["America/Manaus", "Manaus (GMT-4)"], ["America/Noronha", "Noronha (GMT-2)"]];
+const INTERVALOS = [[5, "A cada 5 minutos"], [15, "A cada 15 minutos"], [30, "A cada 30 minutos"], [60, "A cada hora"]];
+const EVENTOS = {
+  novo_pedido: notifEvents[0], estoque_baixo: notifEvents[1], divergencia_estoque: notifEvents[2], nfe_rejeitada: notifEvents[3], resumo_diario: notifEvents[4],
+};
+const PAPEIS = { administrador: "Administrador(a)", operacao: "Operação", financeiro: "Financeiro", expedicao: "Expedição" };
+const settingsCache = {};
+
+async function settingsPanel() {
   switch (state.settingsTab) {
-    case "Preferências":
+    case "Preferências": {
+      const p = (settingsCache.preferences = await api.settings("preferences")) || {
+        language: "pt-BR", timezone: "America/Sao_Paulo", auto_sync_stock: true, pause_out_of_stock: true, auto_import_orders: true, check_interval_minutes: 5, last_sync: null,
+      };
       return `<article class="card">
           <div class="card-head"><strong>Aparência e região</strong></div>
           ${settingRow("Tema claro", "Alterne entre o tema escuro e o claro", toggle(state.light, "Tema claro", 'data-setting="theme"'))}
-          ${settingRow("Idioma", "Idioma da interface", selectBox(["Português (Brasil)", "English", "Español"], "Idioma"))}
-          ${settingRow("Fuso horário", "Usado em pedidos e relatórios", selectBox(["Brasília (GMT-3)", "Manaus (GMT-4)", "Noronha (GMT-2)"], "Fuso horário"))}
+          ${settingRow("Idioma", "Idioma da interface", selectField("language", IDIOMAS, p.language, "Idioma"))}
+          ${settingRow("Fuso horário", "Usado em pedidos e relatórios", selectField("timezone", FUSOS, p.timezone, "Fuso horário"))}
         </article>
         <article class="card">
-          <div class="card-head"><strong>Sincronização</strong><span>Última: há 2 min</span></div>
-          ${settingRow("Sincronizar estoque automaticamente", "Atualiza todos os canais a cada venda", toggle(true, "Sincronizar estoque automaticamente"))}
-          ${settingRow("Pausar anúncios sem estoque", "Evita vendas de produtos indisponíveis", toggle(true, "Pausar anúncios sem estoque"))}
-          ${settingRow("Importar pedidos automaticamente", "Novos pedidos entram direto na fila de separação", toggle(true, "Importar pedidos automaticamente"))}
-          ${settingRow("Intervalo de conferência", "Frequência de checagem com os marketplaces", selectBox(["A cada 5 minutos", "A cada 15 minutos", "A cada 30 minutos", "A cada hora"], "Intervalo de conferência"))}
+          <div class="card-head"><strong>Sincronização</strong><span>Última: ${timeAgo(p.last_sync)}</span></div>
+          ${settingRow("Sincronizar estoque automaticamente", "Atualiza todos os canais a cada venda", toggle(p.auto_sync_stock, "Sincronizar estoque automaticamente", 'name="auto_sync_stock"'))}
+          ${settingRow("Pausar anúncios sem estoque", "Evita vendas de produtos indisponíveis", toggle(p.pause_out_of_stock, "Pausar anúncios sem estoque", 'name="pause_out_of_stock"'))}
+          ${settingRow("Importar pedidos automaticamente", "Novos pedidos entram direto na fila de separação", toggle(p.auto_import_orders, "Importar pedidos automaticamente", 'name="auto_import_orders"'))}
+          ${settingRow("Intervalo de conferência", "Frequência de checagem com os marketplaces", selectField("check_interval_minutes", INTERVALOS, p.check_interval_minutes, "Intervalo de conferência"))}
           ${formActions()}
         </article>`;
-    case "Notificações":
+    }
+    case "Notificações": {
+      const n = await api.settings("notifications");
+      const tg = n ? n.telegram : { linked: true, username: "@lojabeta_bot", since: "2026-09-12" };
+      const eventos = n ? n.events : Object.keys(EVENTOS).map((e, i) => ({ event: e, telegram: notifEvents[i][2][0], email: notifEvents[i][2][1], push: notifEvents[i][2][2] }));
       return `<article class="card">
-          <div class="card-head"><strong>Telegram</strong><span class="connected">● Conectado</span></div>
-          ${settingRow(`<span class="inline-icon tone-telegram">${icon("telegram")}</span>@lojabeta_bot`, "Alertas ativos desde 12/09/2026", telegramLink())}
+          <div class="card-head"><strong>Telegram</strong><span class="${tg.linked ? "connected" : ""}">● ${tg.linked ? "Conectado" : "Não vinculado"}</span></div>
+          ${settingRow(
+            `<span class="inline-icon tone-telegram">${icon("telegram")}</span>${tg.linked ? escapeHtml(tg.username) : "Vincule sua conta"}`,
+            tg.linked ? `Alertas ativos desde ${new Date(tg.since + "T12:00:00").toLocaleDateString("pt-BR")}` : "Abra o bot e envie /start para receber alertas",
+            telegramLink()
+          )}
         </article>
         <article class="card">
           <div class="card-head"><strong>O que você quer receber</strong></div>
           <div class="matrix">
             <div class="matrix-row matrix-head"><div>Evento</div><span>Telegram</span><span>E-mail</span><span>Push</span></div>
-            ${notifEvents
-              .map(
-                ([title, desc, on]) => `<div class="matrix-row"><div><strong>${title}</strong><small>${desc}</small></div>${["Telegram", "E-mail", "Push"]
-                  .map((ch, i) => `<span>${toggle(on[i], `${title} por ${ch}`)}</span>`)
-                  .join("")}</div>`
-              )
+            ${eventos
+              .map((e) => {
+                const [title, desc] = EVENTOS[e.event];
+                return `<div class="matrix-row"><div><strong>${title}</strong><small>${desc}</small></div>${[["telegram", "Telegram"], ["email", "E-mail"], ["push", "Push"]]
+                  .map(([ch, nome]) => `<span>${toggle(e[ch], `${title} por ${nome}`, `data-event="${e.event}" data-channel="${ch}"`)}</span>`)
+                  .join("")}</div>`;
+              })
               .join("")}
           </div>
           ${formActions()}
         </article>`;
-    case "Equipe":
+    }
+    case "Equipe": {
+      const t = await api.settings("team");
+      const membros = t ? t.members.map((m) => [m.name, m.email, PAPEIS[m.role], m.status === "ativo" ? "Ativo" : "Convite pendente"]) : teamMembers;
       return `<article class="card">
-          <div class="card-head"><strong>Usuários <span>${teamMembers.length} de 10</span></strong>${button("＋ Convidar usuário")}</div>
-          ${teamMembers
+          <div class="card-head"><strong>Usuários <span>${membros.length} de ${t ? t.limit : 10}</span></strong>${button("＋ Convidar usuário", "primary", 'data-action="soon"')}</div>
+          ${membros
             .map(
               ([name, email, role, status]) => `<div class="team-row">
-              <span class="team-avatar">${name.split(" ").map((w) => w[0]).join("")}</span>
-              <div><strong>${name}</strong><small>${email}</small></div>
+              <span class="team-avatar">${escapeHtml(name.split(" ").map((w) => w[0]).join("").slice(0, 2))}</span>
+              <div><strong>${escapeHtml(name)}</strong><small>${escapeHtml(email)}</small></div>
               <span class="role-pill">${role}</span>
               <span class="status ${status.toLowerCase().replaceAll(" ", "-")}">${status}</span>
             </div>`
@@ -913,11 +1500,12 @@ function settingsPanel() {
           ${settingRow("Encerrar sessões inativas", "Após 8 horas sem uso", toggle(false, "Encerrar sessões inativas"))}
           ${formActions()}
         </article>`;
+    }
     case "Plano":
       return `<article class="card plan-hero">
           <div><span class="fiscal-kicker">Seu plano</span><div class="plan-name">Plano Pro</div><small>Renova em 12/10/2026 · cobrança mensal</small></div>
           <div class="plan-price">R$ 249<small>/mês</small></div>
-          <div class="row-actions">${button("Comparar planos", "secondary")}${button("Fazer upgrade")}</div>
+          <div class="row-actions">${button("Comparar planos", "secondary", 'data-action="soon"')}${button("Fazer upgrade", "primary", 'data-action="soon"')}</div>
         </article>
         <article class="card">
           <div class="card-head"><strong>Uso do plano</strong><span>Ciclo atual</span></div>
@@ -929,40 +1517,107 @@ function settingsPanel() {
         </article>
         <article class="card">
           <div class="card-head"><strong>Cobrança</strong></div>
-          ${settingRow("Forma de pagamento", "Pix automático", button("Alterar", "secondary"))}
-          ${settingRow("Faturas", "Última: 12/09/2026 · R$ 249,00 · Paga", button("Ver faturas", "secondary"))}
+          ${settingRow("Forma de pagamento", "Pix automático", button("Alterar", "secondary", 'data-action="soon"'))}
+          ${settingRow("Faturas", "Última: 12/09/2026 · R$ 249,00 · Paga", button("Ver faturas", "secondary", 'data-action="soon"'))}
         </article>`;
-    default:
+    default: {
+      const [e, cert] = await Promise.all([api.settings("company"), api.settings("certificate")]);
+      const d = e || {
+        legal_name: "Loja Beta Comércio Ltda", trade_name: currentUser.company, cnpj: "12.345.678/0001-95", state_registration: "123.456.789.110", tax_regime: "simples_nacional",
+        contact_email: "contato@lojabeta.com.br", phone: "(11) 99999-1204", address: "Rua das Flores, 120 · São Paulo/SP", state: "SP", customer_since: "2025-03-01",
+      };
+      settingsCache.company = d;
+      const desde = new Date(d.customer_since + "T12:00:00").toLocaleDateString("pt-BR", { month: "short", year: "numeric" }).replace(" de ", "/").replace(".", "");
+      const c = cert || { type: "A1", holder: "Loja Beta", valid_until: "2027-05-01", days_left: 214, status: "valido" };
       return `<article class="card">
           <div class="card-head"><strong>Dados da empresa</strong><span>Usados na emissão de NF-e</span></div>
-          <div class="profile-head"><span class="profile-avatar">${currentUser.company.split(" ").map((w) => w[0]).join("")}</span><div><strong>${currentUser.company}</strong><small>Plano Pro · cliente desde mar/2025</small></div>${button("Alterar logo", "secondary")}</div>
-          <div class="fields-grid">
-            ${field("Razão social", "Loja Beta Comércio Ltda", "span-2")}
-            ${field("Nome fantasia", currentUser.company)}
-            ${field("CNPJ", "12.345.678/0001-90")}
-            ${field("Inscrição estadual", "123.456.789.110")}
-            <label class="field">Regime tributário${selectBox(["Simples Nacional", "Lucro Presumido", "Lucro Real"], "Regime tributário", "")}</label>
-            ${field("E-mail de contato", "contato@lojabeta.com.br")}
-            ${field("Telefone", "(11) 99999-1204")}
-            ${field("Endereço", "Rua das Flores, 120 · São Paulo/SP", "span-2")}
-          </div>
+          <div class="profile-head"><span class="profile-avatar">${escapeHtml(d.trade_name.split(" ").map((w) => w[0]).join("").slice(0, 2))}</span><div><strong>${escapeHtml(d.trade_name)}</strong><small>Plano Pro · cliente desde ${desde}</small></div>${button("Alterar logo", "secondary", 'data-action="soon"')}</div>
+          <form class="fields-grid" id="company-form">
+            ${field("Razão social", d.legal_name, "span-2", "legal_name")}
+            ${field("Nome fantasia", d.trade_name, "", "trade_name")}
+            ${field("CNPJ", d.cnpj, "", "cnpj")}
+            ${field("Inscrição estadual", d.state_registration, "", "state_registration")}
+            <label class="field">Regime tributário${selectField("tax_regime", REGIMES, d.tax_regime, "Regime tributário", "")}</label>
+            ${field("E-mail de contato", d.contact_email, "", "contact_email")}
+            ${field("Telefone", d.phone, "", "phone")}
+            ${field("Endereço", d.address, "", "address")}
+            ${field("UF", d.state, "", "state")}
+          </form>
           ${formActions()}
         </article>
         <article class="card">
-          <div class="card-head"><strong>Certificado digital</strong><span class="connected">● Válido</span></div>
-          ${settingRow("Certificado A1 · Loja Beta", "Expira em 214 dias (01/05/2027)", button("Substituir", "secondary"))}
+          <div class="card-head"><strong>Certificado digital</strong><span class="${c.status === "valido" ? "connected" : "down"}">● ${c.status === "valido" ? "Válido" : "Vencido"}</span></div>
+          ${settingRow(`Certificado ${c.type} · ${escapeHtml(c.holder || d.trade_name)}`, c.days_left >= 0 ? `Expira em ${c.days_left} dias (${new Date(c.valid_until + "T12:00:00").toLocaleDateString("pt-BR")})` : "Vencido — substitua para emitir NF-e", button("Substituir", "secondary", 'data-action="certificate"'))}
         </article>`;
+    }
   }
 }
 
-function renderSettings() {
+async function saveSettings() {
+  const panel = $("#settings-panel");
+  const checked = (name) => $(`[name="${name}"]`, panel).checked;
+  const value = (name) => $(`[name="${name}"]`, panel).value.trim();
+  if (state.settingsTab === "Empresa") {
+    const body = Object.fromEntries(new FormData($("#company-form")).entries());
+    Object.keys(body).forEach((k) => (body[k] = body[k].trim() || null));
+    const data = await runAction("PUT", "/settings/company", body, "Alterações salvas com sucesso", { reload: false });
+    if (data) {
+      currentUser.company = data.trade_name;
+      renderShell();
+    }
+  } else if (state.settingsTab === "Preferências") {
+    const atual = settingsCache.preferences || {};
+    await runAction(
+      "PUT",
+      "/settings/preferences",
+      {
+        language: value("language"), timezone: value("timezone"), auto_sync_stock: checked("auto_sync_stock"), pause_out_of_stock: checked("pause_out_of_stock"),
+        auto_import_orders: checked("auto_import_orders"), check_interval_minutes: Number(value("check_interval_minutes")),
+        alerts: atual.alerts || { telegram: true, email: true, push: false, daily_summary: true },
+      },
+      "Alterações salvas com sucesso",
+      { reload: false }
+    );
+  } else if (state.settingsTab === "Notificações") {
+    const eventos = {};
+    $$("[data-event]", panel).forEach((i) => ((eventos[i.dataset.event] ||= { event: i.dataset.event })[i.dataset.channel] = i.checked));
+    await runAction("PUT", "/settings/notifications", { events: Object.values(eventos) }, "Alterações salvas com sucesso", { reload: false });
+  } else {
+    showToast("Configurações de segurança chegam depois do MVP.");
+  }
+}
+
+// Liga/desliga um canal em "Onde receber alertas" (tela Notificações).
+async function saveAlert(input) {
+  const prefs = await api.settings("preferences");
+  if (!prefs) return showToast("Não foi possível salvar agora.", "error");
+  delete prefs.last_sync;
+  prefs.alerts[input.dataset.alert] = input.checked;
+  const res = await apiSend("PUT", "/settings/preferences", prefs);
+  if (!res.ok) {
+    input.checked = !input.checked;
+    showToast(apiError(res), "error");
+  } else showToast("Preferência de alerta salva");
+}
+
+function certificateModal() {
+  openModal(
+    "Substituir certificado A1",
+    `<p class="modal-note">No MVP o fluxo fiscal é simulado: informe titular e validade do novo certificado (o upload do arquivo .pfx vem depois).</p>
+    <form class="fields-grid" id="cert-form"><label class="field span-2">Titular<input name="holder" value="${escapeHtml(currentUser.company)}" /></label><label class="field span-2">Válido até<input type="date" name="valid_until" required /></label></form>`,
+    button("Cancelar", "ghost", 'data-action="close-modal"') + button("Salvar certificado", "primary", 'data-action="save-certificate"')
+  );
+}
+
+async function renderSettings() {
+  const panel = await settingsPanel();
   return (
     pageHeader("Configurações", "Gerencie sua empresa, preferências, equipe e plano.") +
     `<div class="settings-layout">
       <nav class="card settings-nav" aria-label="Seções das configurações">${settingsTabs
         .map((t) => `<button type="button" class="${t.label === state.settingsTab ? "active" : ""}" data-settings-tab="${t.label}">${icon(t.icon)}${t.label}</button>`)
         .join("")}</nav>
-      <div class="settings-panel" id="settings-panel">${settingsPanel()}</div>
+      <div class="settings-panel" id="settings-panel">${panel}</div>
     </div>`
   );
 }
@@ -1040,7 +1695,7 @@ function renderShell() {
       <header class="topbar">
         <button class="menu-button" type="button" data-action="open-menu" aria-label="Abrir menu">☰</button>
         <div class="topbar-brand">${logo()}</div>
-        <div class="search"><span>⌕</span><input placeholder="Buscar produtos, pedidos, SKU..." /></div>
+        <div class="search" id="global-search"><span>⌕</span><input id="search-input" type="search" placeholder="Buscar produtos, pedidos, SKU..." autocomplete="off" aria-label="Buscar produtos, pedidos, notas e SKU" aria-controls="search-results" /><div class="search-results card" id="search-results" role="listbox" hidden></div></div>
         <div class="top-actions">
           <button class="notification" type="button" aria-label="Notificações" data-page="Notificações">${icon("bell")}<i id="notif-dot" ${unreadCount() ? "" : "hidden"}></i></button>
           <button class="theme" type="button" data-action="toggle-theme" id="theme-btn"></button>
@@ -1053,13 +1708,14 @@ function renderShell() {
       <div class="chat-head">${logo(true)}<div><strong>Assistente ${CONFIG.brand}</strong><small>● Online</small></div><button type="button" data-action="close-chat" aria-label="Fechar chat">×</button></div>
       <div class="message">Olá! Como posso ajudar na sua operação?</div>
       <div class="quick-actions" id="quick-actions">${Object.keys(chatAnswers).map((t) => `<button type="button" data-quick="${t}">${t}</button>`).join("")}</div>
-      <form class="chat-input" id="chat-form"><input id="chat-input" placeholder="Pergunte sobre sua operação..." autocomplete="off" /><button type="submit" aria-label="Enviar">→</button></form>
+      <form class="chat-input with-voice" id="chat-form"><input id="chat-input" placeholder="Pergunte sobre sua operação..." autocomplete="off" /><button type="button" class="voice-btn" data-action="voice" aria-label="Falar com o assistente" title="Falar">🎤</button><button type="submit" aria-label="Enviar">→</button></form>
       ${telegramLink("Abrir no Telegram", "telegram-link")}
     </aside>
     <button class="chat-fab" type="button" data-action="toggle-chat" aria-label="Abrir assistente no Telegram">${icon("telegram")}</button>
     <div class="toast" id="toast" role="status" hidden></div>
   </div>`;
   updateThemeButton();
+  refreshBadge();
   return renderPage();
 }
 
@@ -1126,6 +1782,7 @@ function hideSplash() {
   window.clearInterval(splash.timer);
   splash.el.classList.add("hide");
   splash.el.setAttribute("aria-hidden", "true");
+  $$(".taylor-stage.wait").forEach((el) => el.classList.remove("wait")); // libera a animação do login
 }
 
 async function withSplash(modo, tarefa) {
@@ -1150,20 +1807,54 @@ function addChatMessage(text, who) {
   panel.scrollTop = panel.scrollHeight;
 }
 
-function answerChat(question) {
+// Pergunta ao backend (POST /api/assistant/messages). Por voz, a resposta também é falada.
+async function answerChat(question, inputMode = "text") {
   addChatMessage(question, "user");
-  const reply = chatAnswers[question] || "Ainda estou aprendendo a responder isso. Conecte o backend para ver dados reais da sua operação.";
-  window.setTimeout(() => addChatMessage(reply, "bot"), 400);
+  if (!CONFIG.useApi) {
+    const reply = chatAnswers[question] || "Ainda estou aprendendo a responder isso. Conecte o backend para ver dados reais da sua operação.";
+    window.setTimeout(() => addChatMessage(reply, "bot"), 400);
+    return;
+  }
+  const res = await apiSend("POST", "/assistant/messages", { message: question, channel: "app", input_mode: inputMode });
+  const reply = (res.data && (res.data.reply || res.data.detail)) || "Não consegui responder agora. Tente de novo em instantes.";
+  addChatMessage(reply, "bot");
+  if (inputMode === "voice") speak(reply);
+}
+
+/* Voz (RF039): reconhecimento e síntese do próprio navegador (Web Speech API), como no protótipo taylor_voice. */
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let listening = null;
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "pt-BR";
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(u);
+}
+
+function startVoice(btn) {
+  if (!Recognition) return showToast("Seu navegador não suporta voz. Use o Chrome ou o Edge.", "error");
+  if (listening) return listening.stop();
+  listening = new Recognition();
+  listening.lang = "pt-BR";
+  listening.interimResults = false;
+  listening.onstart = () => btn.classList.add("listening");
+  listening.onend = () => ((listening = null), btn.classList.remove("listening"));
+  listening.onerror = (e) => showToast(e.error === "not-allowed" ? "Permita o uso do microfone para falar com o assistente." : "Não entendi. Tente de novo.", "error");
+  listening.onresult = (e) => answerChat(e.results[0][0].transcript, "voice");
+  listening.start();
 }
 
 let toastTimer;
-function showToast(text) {
+function showToast(text, kind = "ok") {
   const el = $("#toast");
   if (!el) return;
-  el.innerHTML = `${icon("check")}<span>${text}</span>`;
+  el.innerHTML = `${icon(kind === "error" ? "alert" : "check")}<span>${escapeHtml(text)}</span>`;
+  el.classList.toggle("error", kind === "error");
   el.hidden = false;
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => (el.hidden = true), 2600);
+  toastTimer = window.setTimeout(() => (el.hidden = true), kind === "error" ? 4500 : 2600);
 }
 
 function setTheme(light) {
@@ -1182,12 +1873,174 @@ function setPage(label) {
   window.scrollTo({ top: 0 });
 }
 
+// Ações que dependem de confirmação: o 1º clique pede confirmação, o 2º executa.
+function confirmed(btn, label) {
+  if (btn.dataset.confirm) return true;
+  btn.dataset.confirm = "1";
+  btn.dataset.label = btn.innerHTML;
+  btn.innerHTML = label;
+  window.setTimeout(() => {
+    if (btn.isConnected) (delete btn.dataset.confirm), (btn.innerHTML = btn.dataset.label);
+  }, 3500);
+  return false;
+}
+
+async function handleAction(action, btn) {
+  const id = btn.dataset.id;
+  switch (action) {
+    case "demo-login":
+      return demoLogin(btn);
+    case "copy":
+      return copyText(btn.dataset.copy);
+    case "logout":
+      if (CONFIG.useApi) apiSend("POST", "/auth/logout");
+      storage.clear();
+      state.loggedIn = false;
+      state.demo = null;
+      state.notifList = null;
+      searchCache.data = null;
+      state.unread = null;
+      render();
+      break;
+    case "open-menu":
+      $("#sidebar").classList.add("mobile-open");
+      break;
+    case "close-menu":
+      $("#sidebar").classList.remove("mobile-open");
+      break;
+    case "toggle-theme":
+      setTheme(!state.light);
+      break;
+    case "read-all":
+      if (state.notifList) {
+        const res = await apiSend("POST", "/notifications/read-all");
+        if (!res.ok) return showToast(apiError(res), "error");
+      }
+      notifSource().forEach((n) => (n.unread = false));
+      state.unread = 0;
+      updateNotifications();
+      showToast("Todas as notificações foram marcadas como lidas");
+      break;
+    case "save-settings":
+      if (!CONFIG.useApi) return showToast("Alterações salvas com sucesso");
+      await saveSettings();
+      break;
+    case "cancel-settings":
+      $("#settings-panel").innerHTML = await settingsPanel();
+      showToast("Alterações descartadas");
+      break;
+    case "certificate":
+      certificateModal();
+      break;
+    case "save-certificate": {
+      const f = new FormData($("#cert-form"));
+      if (!f.get("valid_until")) return modalError("Informe a data de validade.");
+      await runAction("PUT", "/settings/certificate", { holder: f.get("holder") || null, valid_until: f.get("valid_until") }, "Certificado atualizado");
+      break;
+    }
+    case "open-chat":
+      $("#chat-panel").hidden = false;
+      $("#sidebar").classList.remove("mobile-open");
+      break;
+    case "close-chat":
+      $("#chat-panel").hidden = true;
+      break;
+    case "toggle-chat":
+      $("#chat-panel").hidden = !$("#chat-panel").hidden;
+      break;
+    case "voice":
+      startVoice(btn);
+      break;
+    case "close-modal":
+      closeModal();
+      break;
+    case "soon":
+      showToast("Esta função está prevista para depois do MVP.");
+      break;
+    // Produtos
+    case "new-product":
+      newProductModal();
+      break;
+    case "save-product":
+      await saveProduct();
+      break;
+    case "delete-product":
+      if (confirmed(btn, "Confirmar exclusão")) await runAction("DELETE", `/products/${id}`, undefined, "Produto excluído");
+      break;
+    // Pedidos
+    case "order-status":
+      if (btn.dataset.status === "cancelado" && !confirmed(btn, "Confirmar cancelamento")) return;
+      await runAction("PATCH", `/orders/${id}/status`, { status: btn.dataset.status }, btn.dataset.status === "cancelado" ? "Pedido cancelado e estoque devolvido" : "Status do pedido atualizado");
+      refreshBadge();
+      break;
+    case "export-orders":
+      await exportOrders();
+      break;
+    // Sincronizações (dashboard, pedidos, estoque, marketplace)
+    case "sync":
+      await startSync(btn.dataset.path, btn);
+      break;
+    // Estoque
+    case "review-divergences":
+      await divergencesModal();
+      break;
+    case "resolve": {
+      const body = btn.dataset.source === "channel" ? { source: "channel", integration_id: btn.dataset.integration } : { source: "central" };
+      const data = await runAction("POST", `/stock/divergences/${id}/resolve`, body, null);
+      if (data) showToast(`Divergência resolvida: ${data.central_stock} unidades em todos os canais`);
+      break;
+    }
+    // Notas fiscais
+    case "emit-invoice":
+      await emitInvoiceModal();
+      break;
+    case "invoice-emit":
+      await emitInvoice(id);
+      break;
+    case "invoice-resend":
+      await emitInvoice(id, true);
+      break;
+    case "emit-batch": {
+      const data = await runAction("POST", "/invoices/batch", {}, null, { reload: false });
+      if (!data) return;
+      showToast(`${data.total} NF-e em validação e envio à SEFAZ (simulada)...`);
+      window.setTimeout(async () => {
+        const s = await api.invoicesSummary();
+        if (s) showToast(`Lote concluído: ${s.issued_today} emitidas hoje · ${s.rejected} rejeitadas · ${s.awaiting} com pendências`);
+        refreshBadge();
+        renderPage();
+      }, 3000);
+      break;
+    }
+    // Marketplaces e integrações
+    case "connect-modal":
+      await connectModal();
+      break;
+    case "connect":
+    case "reconnect": {
+      const data = await runAction("POST", action === "connect" ? "/marketplaces/connect" : `/integrations/${id}/reconnect`,
+        action === "connect" ? { marketplace: btn.dataset.name } : undefined, "Canal conectado · importando produtos e pedidos...");
+      if (data && data.sync_id) waitSync(data.sync_id).then(() => (refreshBadge(), renderPage()));
+      break;
+    }
+    case "disconnect":
+      if (confirmed(btn, "Confirmar")) await runAction("DELETE", `/integrations/${id}`, undefined, `${btn.dataset.name} desconectado`);
+      break;
+  }
+}
+
 document.addEventListener("click", (event) => {
   const target = event.target;
 
+  // Clique fora do conteúdo do modal (no fundo escuro) fecha o modal.
+  if (target.id === "modal") return closeModal();
+
   const auth = target.closest("[data-auth]");
   if (auth) {
+    const typed = $("#login-form [name=email]") ? $("#login-form [name=email]").value.trim() : "";
     state.authMode = auth.dataset.auth;
+    state.recovery = auth.dataset.auth === "forgot" ? { email: typed } : {};
+    state.loginNotice = "";
     renderLogin();
     return;
   }
@@ -1214,7 +2067,10 @@ document.addEventListener("click", (event) => {
   if (settingsTab) {
     state.settingsTab = settingsTab.dataset.settingsTab;
     $$(".settings-nav button").forEach((b) => b.classList.toggle("active", b.dataset.settingsTab === state.settingsTab));
-    $("#settings-panel").innerHTML = settingsPanel();
+    settingsPanel().then((html) => {
+      const panel = $("#settings-panel");
+      if (panel) panel.innerHTML = html;
+    });
     return;
   }
 
@@ -1238,6 +2094,27 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  // Abas que filtram no backend (produtos, pedidos, notas).
+  const filterBtn = target.closest("[data-filter]");
+  if (filterBtn) {
+    state[filterBtn.dataset.filter] = filterBtn.dataset.value;
+    renderPage();
+    return;
+  }
+
+  const reportPeriod = target.closest("[data-report-period]");
+  if (reportPeriod) {
+    state.reportsPeriod = reportPeriod.dataset.reportPeriod;
+    renderPage();
+    return;
+  }
+
+  const rowBtn = target.closest("[data-row]");
+  if (rowBtn) {
+    const open = { product: productModal, order: orderModal, invoice: invoiceModal }[rowBtn.dataset.row];
+    return open(rowBtn.dataset.id);
+  }
+
   const tab = target.closest(".tabs button");
   if (tab) {
     $$("button", tab.parentElement).forEach((b) => b.classList.toggle("active", b === tab));
@@ -1251,9 +2128,11 @@ document.addEventListener("click", (event) => {
   }
 
   const quick = target.closest("[data-quick]");
-  if (quick) return answerChat(quick.dataset.quick);
+  if (quick) return answerChat(quick.dataset.quick, "quick_action");
 
-  if (target.closest("#sync-btn")) {
+  const syncBtn = target.closest("#sync-btn");
+  if (syncBtn) {
+    if (CONFIG.useApi) return startSync("/channels/sync", syncBtn);
     if (state.syncing) return;
     state.syncing = true;
     loadChannels();
@@ -1266,40 +2145,8 @@ document.addEventListener("click", (event) => {
   }
 
   const action = target.closest("[data-action]");
-  if (!action) return;
-  switch (action.dataset.action) {
-    case "logout":
-      state.loggedIn = false;
-      render();
-      break;
-    case "open-menu":
-      $("#sidebar").classList.add("mobile-open");
-      break;
-    case "close-menu":
-      $("#sidebar").classList.remove("mobile-open");
-      break;
-    case "toggle-theme":
-      setTheme(!state.light);
-      break;
-    case "read-all":
-      notifications.forEach((n) => (n.unread = false));
-      updateNotifications();
-      showToast("Todas as notificações foram marcadas como lidas");
-      break;
-    case "save-settings":
-      showToast("Alterações salvas com sucesso");
-      break;
-    case "open-chat":
-      $("#chat-panel").hidden = false;
-      $("#sidebar").classList.remove("mobile-open");
-      break;
-    case "close-chat":
-      $("#chat-panel").hidden = true;
-      break;
-    case "toggle-chat":
-      $("#chat-panel").hidden = !$("#chat-panel").hidden;
-      break;
-  }
+  if (!action || action.disabled) return;
+  handleAction(action.dataset.action, action);
 });
 
 document.addEventListener("change", (event) => {
@@ -1308,9 +2155,96 @@ document.addEventListener("change", (event) => {
     loadChart();
   }
   if (event.target.matches('[data-setting="theme"]')) setTheme(event.target.checked);
+  if (event.target.matches("[data-alert]") && CONFIG.useApi) saveAlert(event.target);
 });
 
+/* Busca global (barra do topo): procura em produtos, pedidos e notas fiscais.
+   Não há rota de busca no backend: carrega as listas (cache curto) e filtra aqui.
+   Clicar num resultado abre o mesmo detalhe do botão ••• (data-row / data-id). */
+const SEARCH_GROUPS = [
+  { kind: "product", label: "Produtos", page: "Produtos", path: "/products?ids=1", fallback: () => products, title: (r) => r[0], sub: (r) => `SKU ${r[1]} · ${r[2]} un. · ${r[3]}` },
+  { kind: "order", label: "Pedidos", page: "Pedidos", path: "/orders?ids=1&limit=500", fallback: () => orders, title: (r) => `Pedido ${r[0]}`, sub: (r) => `${r[1]} · ${r[3]} · ${r[5]} · ${r[6]}` },
+  { kind: "invoice", label: "Notas fiscais", page: "Notas fiscais", path: "/invoices?ids=1&limit=500", fallback: () => invoices, title: (r) => r[0], sub: (r) => `Pedido ${r[1]} · ${r[3]} · ${r[4]} · ${r[5]}` },
+];
+const SEARCH_HEADERS = { product: 7, order: 7, invoice: 7 }; // colunas visíveis; o id vem depois (ids=1)
+const searchCache = { at: 0, data: null };
+let searchTimer = null;
+
+async function searchData() {
+  if (searchCache.data && Date.now() - searchCache.at < 30000) return searchCache.data;
+  const lists = await Promise.all(SEARCH_GROUPS.map((g) => apiGet(g.path, g.fallback())));
+  searchCache.data = lists.map((l) => l || []);
+  searchCache.at = Date.now();
+  return searchCache.data;
+}
+
+async function runSearch(text) {
+  const box = $("#search-results");
+  if (!box) return;
+  const query = normalize(text.trim());
+  if (query.length < 2) return (box.hidden = true);
+  box.hidden = false;
+  if (!searchCache.data) box.innerHTML = `<div class="search-empty">Buscando...</div>`;
+  const lists = await searchData();
+  if (normalize($("#search-input").value.trim()) !== query) return; // o usuário continuou digitando
+  const terms = query.split(/\s+/);
+  const groups = SEARCH_GROUPS.map((g, gi) => {
+    const hits = lists[gi].filter((row) => {
+      const hay = normalize(row.slice(0, SEARCH_HEADERS[g.kind]).join(" "));
+      return terms.every((t) => hay.includes(t));
+    });
+    // primeiro o que bate com o título (nome, nº do pedido ou da nota); depois o resto, na ordem original
+    const score = (row) => (normalize(g.title(row)).includes(query) ? 0 : 1);
+    hits.sort((a, b) => score(a) - score(b));
+    return { g, hits };
+  }).filter((x) => x.hits.length);
+  if (!groups.length) {
+    box.innerHTML = `<div class="search-empty">${icon("search")}<span>Nada encontrado para “${escapeHtml(text.trim())}”</span></div>`;
+    return;
+  }
+  box.innerHTML = groups
+    .map(({ g, hits }) => {
+      const items = hits
+        .slice(0, 5)
+        .map((r) => {
+          const id = r.length > SEARCH_HEADERS[g.kind] ? r[SEARCH_HEADERS[g.kind]] : "";
+          const attrs = id ? `data-row="${g.kind}" data-id="${id}"` : `data-page="${g.page}"`;
+          return `<button type="button" class="search-item" role="option" ${attrs}><strong>${escapeHtml(g.title(r))}</strong><small>${escapeHtml(g.sub(r))}</small></button>`;
+        })
+        .join("");
+      const more = hits.length > 5 ? `<button type="button" class="search-more" data-page="${g.page}">Ver todos os ${hits.length} em ${g.label}</button>` : "";
+      return `<div class="search-group"><span class="search-label">${g.label}</span>${items}${more}</div>`;
+    })
+    .join("");
+}
+
+function closeSearch(clear = false) {
+  const box = $("#search-results");
+  if (box) box.hidden = true;
+  if (clear && $("#search-input")) $("#search-input").value = "";
+}
+
+document.addEventListener("focusin", (event) => {
+  if (event.target.id !== "search-input") return;
+  searchData(); // já começa a carregar enquanto a pessoa digita
+  if (event.target.value.trim().length >= 2) runSearch(event.target.value);
+});
+
+document.addEventListener(
+  "click",
+  (event) => {
+    const inSearch = event.target.closest && event.target.closest("#global-search");
+    if (!inSearch) return closeSearch();
+    if (event.target.closest(".search-item, .search-more")) closeSearch(true);
+  },
+  true
+);
+
 document.addEventListener("input", (event) => {
+  if (event.target.id === "search-input") {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => runSearch(event.target.value), 200);
+  }
   if (event.target.id === "help-search") {
     state.helpQuery = event.target.value;
     $("#faq-list").innerHTML = faqList();
@@ -1318,12 +2252,113 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (event.target.id === "search-input") {
+    if (event.key === "Escape") return closeSearch(true);
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const first = $("#search-results .search-item");
+      if (first) first.click();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      const first = $("#search-results button");
+      if (first) first.focus();
+      return;
+    }
+  }
+  if (event.target.closest && event.target.closest("#search-results")) {
+    const btns = $$("#search-results button");
+    const i = btns.indexOf(event.target);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const next = btns[i + (event.key === "ArrowDown" ? 1 : -1)];
+      (next || $("#search-input")).focus();
+      return;
+    }
+    if (event.key === "Escape") {
+      closeSearch(true);
+      $("#search-input").focus();
+      return;
+    }
+  }
   const item = event.target.closest && event.target.closest("[data-notif]");
   if (item && item === event.target && (event.key === "Enter" || event.key === " ")) {
     event.preventDefault();
     markRead(item.dataset.notif);
   }
 });
+
+// Login e cadastro no backend: guarda o token e os dados do usuário/empresa.
+async function loginWithApi(data, error) {
+  const isLogin = state.authMode === "login";
+  const body = isLogin
+    ? { email: data.get("email"), password: data.get("password"), remember: data.get("remember") === "on" }
+    : { name: data.get("name"), company: data.get("company"), email: data.get("email"), password: data.get("password"), cnpj: data.get("cnpj") };
+  const submit = $("#login-form [type=submit]");
+  submit.disabled = true;
+  const res = await apiSend("POST", isLogin ? "/auth/login" : "/auth/register", body);
+  submit.disabled = false;
+  if (!res.ok) {
+    error.textContent = apiError(res, "Não foi possível entrar.");
+    error.hidden = false;
+    return;
+  }
+  storage.set(res.data.access_token, isLogin ? body.remember : true);
+  applyUser(res.data);
+  state.loggedIn = true;
+  state.page = "Início";
+  withSplash("carregamento", render);
+}
+
+function applyUser(data) {
+  Object.assign(currentUser, {
+    name: data.user.name.split(" ")[0],
+    company: data.company ? data.company.name : "Minha empresa",
+    initials: data.user.initials,
+  });
+  state.demo = data.demo || null;
+}
+
+// Conta Demo: o backend cria uma loja isolada com os dados de exemplo e já entra nela.
+// O token fica no localStorage: reabrir o link (ou o QR code) volta para a mesma loja.
+async function demoLogin(btn) {
+  const error = $("#login-error");
+  const label = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = "Criando sua loja...";
+  const res = await apiSend("POST", "/auth/demo");
+  if (!res.ok) {
+    btn.disabled = false;
+    btn.innerHTML = label;
+    error.textContent = apiError(res, "Não foi possível criar a conta Demo.");
+    error.hidden = false;
+    return;
+  }
+  storage.set(res.data.access_token, true);
+  applyUser(res.data);
+  state.loggedIn = true;
+  state.page = "Início";
+  withSplash("carregamento", render);
+}
+
+// Copiar para a área de transferência (navigator.clipboard só existe em https/localhost).
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  showToast("Copiado");
+}
 
 document.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -1335,6 +2370,7 @@ document.addEventListener("submit", (event) => {
       error.hidden = false;
       return;
     }
+    if (CONFIG.useApi) return loginWithApi(data, error);
     state.loggedIn = true;
     state.page = "Início";
     withSplash("carregamento", render);
@@ -1346,7 +2382,86 @@ document.addEventListener("submit", (event) => {
     input.value = "";
     answerChat(text);
   }
+  if (event.target.id === "recovery-form") submitRecovery(event.target);
+  if (event.target.id === "product-form") saveProduct();
+  if (event.target.id === "report-custom") {
+    const data = new FormData(event.target);
+    state.reportsFrom = data.get("from");
+    state.reportsTo = data.get("to");
+    renderPage();
+  }
 });
 
-/* Início: splash de abertura por cima enquanto a tela de login é montada */
-withSplash("abertura", render);
+/* Início: splash de abertura por cima enquanto a tela de login é montada.
+   Com sessão salva (Lembrar de mim), entra direto no painel. */
+async function submitRecovery(form) {
+  const data = new FormData(form);
+  const error = $("#login-error");
+  const show = (text) => error && ((error.textContent = text), (error.hidden = !text));
+  if (!CONFIG.useApi) return show("Disponível só com o backend ligado (CONFIG.useApi = true).");
+  const submit = form.querySelector("[type=submit]");
+
+  if (state.authMode === "forgot") {
+    const email = String(data.get("email") || "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return show("Informe um e-mail válido.");
+    submit.disabled = true;
+    const res = await apiSend("POST", "/auth/forgot-password", { email });
+    submit.disabled = false;
+    if (!res.ok) return show(apiError(res));
+    state.recovery = { email, sent: res.data.detail, demoLink: res.data.demo_link || "" };
+    return renderLogin();
+  }
+
+  const password = String(data.get("password") || "");
+  if (password.length < 6) return show("A nova senha precisa ter pelo menos 6 caracteres.");
+  if (password !== data.get("confirm")) return show("As senhas não conferem.");
+  submit.disabled = true;
+  const res = await apiSend("POST", "/auth/reset-password", { token: state.recovery.token, password });
+  submit.disabled = false;
+  if (!res.ok) {
+    if (res.status !== 400) return show(apiError(res));
+    state.recovery.invalid = apiError(res);
+    return renderLogin();
+  }
+  storage.clear(); // a troca de senha encerra as sessões abertas
+  state.recovery = {};
+  state.authMode = "login";
+  state.loginNotice = res.data.detail;
+  renderLogin();
+}
+
+// Link recebido por e-mail: http://.../#redefinir-senha=<token>. O token sai da barra de endereço na hora.
+function readResetLink() {
+  const match = location.hash.match(/^#redefinir-senha=([\w-]+)$/);
+  if (!match) return false;
+  history.replaceState(null, "", location.pathname + location.search);
+  state.authMode = "reset";
+  state.recovery = { token: match[1], checking: CONFIG.useApi };
+  state.loginNotice = "";
+  if (CONFIG.useApi)
+    apiSend("POST", "/auth/reset-password/check", { token: match[1] }).then((res) => {
+      if (state.recovery.token !== match[1]) return;
+      state.recovery.checking = false;
+      if (res.ok) state.recovery.email = res.data.email;
+      else state.recovery.invalid = apiError(res);
+      if (!state.loggedIn) renderLogin();
+    });
+  return true;
+}
+
+window.addEventListener("hashchange", () => {
+  if (!state.loggedIn && readResetLink()) renderLogin();
+});
+
+async function boot() {
+  const resetting = readResetLink();
+  if (CONFIG.useApi && storage.get() && !resetting) {
+    const me = await api.me();
+    if (me) {
+      applyUser(me);
+      state.loggedIn = true;
+    } else storage.clear();
+  }
+  return render();
+}
+withSplash("abertura", boot);

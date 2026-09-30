@@ -4,16 +4,19 @@
 
 | Integração | Integração real hoje? | Situação no MVP | Onde aparece no front |
 |---|---|---|---|
-| Supabase | Não | **[PLANEJADO]** — banco de dados (resumo do projeto) | Não aparece |
-| Gemini | Não | **[PLANEJADO]** — IA do assistente; hoje respostas fixas **[SIMULADO]** | Painel "Assistente Taylor" |
-| Telegram | Somente link externo (`t.me`) | **[PLANEJADO]** — bot de consultas e alertas | Botão flutuante, card Telegram, Integrações, Notificações, Ajuda |
-| Voz | Não | **[PLANEJADO]** — texto + voz com resposta sonora | Não aparece |
+| Supabase | Sim | **[REAL]** — banco de dados (PostgreSQL), schema `taylor`, conexão direta do back-end e do bot | Todas as telas (via back-end) |
+| Gemini | Sim (opcional) | **[REAL]** — identifica a intenção da mensagem quando há `GEMINI_API_KEY`; sem chave, palavras-chave | Painel "Assistente Taylor" |
+| Telegram | Sim | **[REAL]** — bot `@EstoqueLojas_bot` (`bot_estoque/`): consultas e atualizações de estoque, aviso de novo pedido e resumo | Botão flutuante, card Telegram, Integrações, Notificações, Ajuda, card da conta Demo |
+| Voz | Sim (no navegador) | **[REAL]** — Web Speech API: fala → texto → back-end → resposta falada | Microfone no chat do assistente; protótipo `taylor_voice/` |
 | Marketplaces (Mercado Livre, Shopee, Magalu) | Não | **[SIMULADO]** por decisão do MVP; OAuth real **[PLANEJADO]** | Dashboard, Produtos, Pedidos, Estoque, Marketplaces, Integrações |
 | Emissão fiscal (NF-e / SEFAZ) | Não | **[SIMULADO]** por decisão do MVP | Notas fiscais, Configurações › Empresa, Notificações, Ajuda |
 
-> A única integração externa **real** existente hoje é o **link** `https://t.me/taylor_assistente_bot` (abre o Telegram em outra aba). Não há troca de dados com nenhum serviço.
+> Esta página foi escrita antes do back-end. O quadro acima mostra a situação atual; as seções abaixo guardam a
+> especificação original, com as correções marcadas. Marketplaces e SEFAZ continuam **simulados**.
 
-Configuração: segredos (chaves e tokens) devem ficar em variáveis de ambiente do back-end, nunca no front-end. Nomes sugeridos: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GEMINI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `JWT_SECRET`.
+Configuração: segredos (chaves e tokens) ficam em variáveis de ambiente, nunca no front-end. Nomes usados:
+`DATABASE_URL`, `DB_SCHEMA`, `JWT_SECRET` e `GEMINI_API_KEY` no back-end (`backend/.env.example`);
+`TELEGRAM_TOKEN`, `DATABASE_URL` e `DB_SCHEMA` no bot (`bot_estoque/.env.example`).
 
 ---
 
@@ -59,16 +62,17 @@ Pendentes: modelo do Gemini a usar; lista final de intenções; ações de escri
 
 | Item | Descrição |
 |---|---|
-| Classificação | **[PLANEJADO]** (existe apenas o link `https://t.me/taylor_assistente_bot`) |
+| Classificação | **[REAL]** — bot `@EstoqueLojas_bot` (nome de exibição "Taylor_assistente_bot"), link `https://t.me/EstoqueLojas_bot` (`CONFIG.telegram`) |
 | Fonte | Resumo do projeto ("Bot no Telegram para consultas relacionadas à operação"); fluxograma (lane "Telegram": "Recebe mensagem do lojista" → "Envia a resposta via Telegram"); front-end (card "Sua operação no Telegram", matriz de notificações, FAQ) |
 | Funções | (a) **Consultas**: o lojista pergunta ("vendas de hoje", "estoque baixo") e recebe a resposta com os mesmos dados do painel. (b) **Alertas**: estoque baixo, novos pedidos, divergências, NF-e rejeitadas e resumo diário, conforme a matriz Evento × Canal. |
-| Recebimento | Webhook `POST /api/telegram/webhook` (Bot API `setWebhook` com `secret_token`) |
-| Envio | Bot API `sendMessage` com o `chat_id` salvo em `vinculo_telegram` |
-| Nome do bot | Divergência: `CONFIG.telegram` aponta para `taylor_assistente_bot`, mas as telas mostram a conta `@lojabeta_bot`. **Pendente de definição.** |
-| Vínculo usuário ↔ chat | **Pendente de definição** (sugestão: deep link `https://t.me/<bot>?start=<token>` gerado por `POST /api/telegram/link`) |
+| Implementação | Programa à parte em Node.js + Telegraf (`bot_estoque/`), que lê e grava direto nas tabelas do schema `taylor` (não passa pelo back-end). |
+| Recebimento | **Long polling** (`getUpdates`, `bot.launch()`). O webhook `POST /api/telegram/webhook` previsto abaixo **não é usado**. Só pode haver uma cópia do bot ligada por token. |
+| Envio | Bot API `sendMessage` com o `chat_id` salvo em `vinculo_telegram`: aviso de novo pedido (o bot consulta o banco a cada 20 s) e resumo às 9h, 13h e 18h, conforme a matriz Evento × Canal |
+| Nome do bot | **Resolvido:** `@EstoqueLojas_bot` (nome de exibição "Taylor_assistente_bot"; o usuário `@taylor_assistente_bot` não existe). A conta vinculada da integração Telegram nos dados de exemplo também passou a ser `@EstoqueLojas_bot`. |
+| Vínculo usuário ↔ chat | Comando `/login` no bot, com o e-mail e a senha do painel (bcrypt). O chat fica salvo em `vinculo_telegram` e aparece em Configurações › Notificações; `/sair` desfaz. A conta Demo mostra no painel o e-mail e a senha para isso. |
 | Suporte humano | A Ajuda cita "Suporte no Telegram — seg. a sex., das 8h às 20h". Se é o mesmo bot ou outro canal: **Pendente de definição** |
 
-Divergência do fluxograma: na lane "Usuário" consta **"Envia mensagem no WhatsApp"**, mas a seta segue para a lane **Telegram** e todas as demais fontes citam apenas o Telegram. Considerado **Telegram**; registrado em [pendencias.md](pendencias.md).
+Divergência do fluxograma: na lane "Usuário" consta **"Envia mensagem no WhatsApp"**, mas a seta segue para a lane **Telegram** e todas as demais fontes citam apenas o Telegram. Considerado **Telegram**.
 
 ---
 

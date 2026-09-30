@@ -288,6 +288,30 @@ sequenceDiagram
 
 ## 11. Consulta pelo Telegram — planejado (UC19)
 
+**Como ficou implementado:** o bot `@EstoqueLojas_bot` (`bot_estoque/`) busca as mensagens por long polling e
+consulta o banco direto, por comandos (sem Gemini e sem webhook):
+
+```mermaid
+sequenceDiagram
+    actor L as Lojista
+    participant T as Telegram
+    participant B as bot_estoque
+    participant D as DB (schema taylor)
+    loop long polling
+        B->>T: getUpdates
+    end
+    L->>T: /login, e-mail e senha do painel
+    T-->>B: mensagens
+    B->>D: Confere usuario.senha_hash (bcrypt) e grava vinculo_telegram
+    L->>T: /estoque
+    T-->>B: mensagem
+    B->>D: Produtos da empresa vinculada
+    B->>T: sendMessage (catálogo com quantidades)
+    T-->>L: Resposta no chat
+```
+
+Proposta original (webhook no back-end), mantida como referência:
+
 ```mermaid
 sequenceDiagram
     actor L as Lojista

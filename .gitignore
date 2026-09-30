@@ -1,0 +1,16 @@
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Segredos
+.env
+*.env.local
+
+# Supabase CLI
+supabase/.branches
+supabase/.temp
