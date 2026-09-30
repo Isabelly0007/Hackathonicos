@@ -37,7 +37,7 @@ def identificar_intencao(mensagem: str, intencoes: dict[str, str]) -> str:
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
             },
-            timeout=15,
+            timeout=8,  # Gemini lento ou sobrecarregado: as palavras-chave respondem no lugar
         )
         resp.raise_for_status()
         texto = resp.json()["candidates"][0]["content"]["parts"][0]["text"]

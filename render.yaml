@@ -42,6 +42,8 @@ services:
         value: "200"
       - key: GEMINI_API_KEY     # opcional: sem chave o assistente usa palavras-chave
         sync: false
+      - key: GEMINI_MODEL       # 30/09/2026: ~1 s por pergunta e sem erros; o gemini-3.5-flash deu 503 e até 11 s
+        value: gemini-3.5-flash-lite
 
   - type: worker                # long polling: não recebe HTTP, só busca as mensagens no Telegram
     name: taylor-bot

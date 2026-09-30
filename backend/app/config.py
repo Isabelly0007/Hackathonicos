@@ -52,7 +52,9 @@ class Settings(BaseSettings):
 
     # Gemini (opcional: sem chave, o assistente usa palavras-chave)
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    # O Gemini só classifica a intenção: o modelo "lite" basta e responde em ~1 s. (O gemini-2.5-flash
+    # deixou de existir para as chaves novas: 404.)
+    gemini_model: str = "gemini-3.5-flash-lite"
 
     # Simuladores
     sefaz_taxa_rejeicao: float = 0.1
