@@ -11,10 +11,14 @@
    ===================================================================== */
 
 /* ---------- 1. CONFIG ---------- */
+// Aberto na própria máquina (localhost, 127.0.0.1 ou dois cliques no arquivo): ambiente de desenvolvimento.
+const EM_LOCALHOST = ["localhost", "127.0.0.1", ""].includes(location.hostname);
 const CONFIG = {
   useApi: true, // true = usa o backend (FastAPI); false = só os dados de exemplo abaixo
-  // Aberto pelo backend (http://localhost:8000) usa a mesma origem; aberto como arquivo ou por outro servidor, aponta para a porta 8000.
-  apiBase: location.protocol.startsWith("http") && location.port === "8000" ? "/api" : "http://localhost:8000/api",
+  local: EM_LOCALHOST, // só em localhost o login vem preenchido com o usuário de teste
+  // Publicado (ex.: Render) ou aberto pelo backend (porta 8000): mesma origem, "/api".
+  // Aberto como arquivo ou por outro servidor local (ex.: Live Server): aponta para o backend na porta 8000.
+  apiBase: location.protocol.startsWith("http") && (!EM_LOCALHOST || location.port === "8000") ? "/api" : "http://localhost:8000/api",
   logo: "img/logo.svg", // logo usada no sistema todo (login, sidebar, topbar, chat)
   splashMin: { abertura: 2500, carregamento: 3000 }, // tempo mínimo (ms) da tela de carregamento
   brand: "Taylor",
@@ -384,6 +388,7 @@ const iconPaths = {
   sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
   card: '<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h4"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+  copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6A1.5 1.5 0 0 0 14 4.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
 };
 
 function icon(name) {
@@ -415,6 +420,7 @@ const state = {
   reportsTo: "",
   notifList: null, // notificações vindas da API (null = usa os dados de exemplo)
   unread: null,
+  demo: null, // conta Demo: { email, password, expires_at } para o card "Seus dados de acesso"
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -748,8 +754,8 @@ function renderLogin() {
       <div class="title">${isLogin ? "Bem-vinda de volta" : "Comece sua operação conectada"}</div>
       <p>${isLogin ? `Acesse seu painel ${CONFIG.brand}` : "Configure sua empresa e seu primeiro canal"}</p>
       ${isLogin ? "" : `<div class="form-grid"><label>Seu nome<input name="name" placeholder="Nome completo" /></label><label>Empresa<input name="company" placeholder="Nome da sua loja" /></label></div>`}
-      <label>E-mail<input name="email" type="email" placeholder="voce@sualoja.com.br" ${isLogin ? 'value="isabela@lojabeta.com.br"' : ""} /></label>
-      <label>Senha<input name="password" type="password" placeholder="Sua senha" ${isLogin ? 'value="taylor123"' : ""} /></label>
+      <label>E-mail<input name="email" type="email" placeholder="voce@sualoja.com.br" ${isLogin && CONFIG.local ? 'value="isabela@lojabeta.com.br"' : ""} /></label>
+      <label>Senha<input name="password" type="password" placeholder="Sua senha" ${isLogin && CONFIG.local ? 'value="taylor123"' : ""} /></label>
       ${isLogin ? "" : `<label>CNPJ<input name="cnpj" placeholder="00.000.000/0001-00" /></label>`}
       ${isLogin
         ? `<div class="login-options"><label class="check"><input type="checkbox" name="remember" checked /> Lembrar de mim</label><button type="button" class="link" data-auth="forgot">Esqueci minha senha</button></div>`
@@ -757,12 +763,37 @@ function renderLogin() {
       ${isLogin && state.loginNotice ? `<div class="form-ok">${icon("check")}<span>${escapeHtml(state.loginNotice)}</span></div>` : ""}
       <div class="form-error" id="login-error" hidden></div>
       ${button(isLogin ? "Entrar na plataforma" : "Criar minha operação", "primary").replace('type="button"', 'type="submit"')}
+      ${isLogin && CONFIG.useApi
+        ? `<div class="demo-divider"><span>ou</span></div>
+      ${button("Entrar com a conta Demo", "secondary", 'data-action="demo-login"')}
+      <div class="demo-note">Cria uma loja de exemplo só sua, com produtos, pedidos e notas, para testar à vontade.</div>`
+        : ""}
       <small>${isLogin ? "Ambiente seguro e protegido" : "Teste a plataforma com seus dados reais"}</small>
     </form>`}
   </main>`;
 }
 
 /* Dashboard */
+// Conta Demo: e-mail e senha para o /login do bot do Telegram e o horário em que a loja será apagada.
+function demoAccessCard() {
+  const d = state.demo;
+  if (!d) return "";
+  const fim = new Date(d.expires_at);
+  const hora = fim.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const quando = fim.toDateString() === new Date().toDateString() ? `às ${hora}` : `em ${fim.toLocaleDateString("pt-BR")} às ${hora}`;
+  const bot = "@" + CONFIG.telegram.split("/").pop();
+  const field = (label, value) => `<div class="demo-field">
+      <small>${label}</small><code>${escapeHtml(value)}</code>
+      ${button(`${icon("copy")}Copiar`, "ghost", `data-action="copy" data-copy="${escapeHtml(value)}" aria-label="Copiar ${label.toLowerCase()}"`)}
+    </div>`;
+  return `<article class="card demo-access">
+    <div class="card-head"><strong>Seus dados de acesso</strong><span>Loja de demonstração · apagada ${quando}</span></div>
+    <div class="demo-fields">${field("E-mail", d.email)}${field("Senha", d.password)}</div>
+    <p>No Telegram, abra o ${escapeHtml(bot)}, envie <b>/login</b> e depois o e-mail e a senha acima. Tudo o que você fizer lá aparece aqui, e vice-versa.</p>
+    ${telegramLink(`Abrir ${escapeHtml(bot)}`, "btn secondary")}
+  </article>`;
+}
+
 function dashboardShell() {
   return `
   ${pageHeader(
@@ -772,6 +803,7 @@ function dashboardShell() {
       .map((p) => `<button type="button" class="${p === state.period ? "on" : ""}" data-period="${p}" aria-pressed="${p === state.period}">${p}</button>`)
       .join("")}</div>`
   )}
+  ${demoAccessCard()}
   <div id="dash-stats"></div>
   <div class="dashboard-grid">
     <article class="card chart-card">
@@ -1856,10 +1888,15 @@ function confirmed(btn, label) {
 async function handleAction(action, btn) {
   const id = btn.dataset.id;
   switch (action) {
+    case "demo-login":
+      return demoLogin(btn);
+    case "copy":
+      return copyText(btn.dataset.copy);
     case "logout":
       if (CONFIG.useApi) apiSend("POST", "/auth/logout");
       storage.clear();
       state.loggedIn = false;
+      state.demo = null;
       state.notifList = null;
       searchCache.data = null;
       state.unread = null;
@@ -2280,6 +2317,47 @@ function applyUser(data) {
     company: data.company ? data.company.name : "Minha empresa",
     initials: data.user.initials,
   });
+  state.demo = data.demo || null;
+}
+
+// Conta Demo: o backend cria uma loja isolada com os dados de exemplo e já entra nela.
+// O token fica no localStorage: reabrir o link (ou o QR code) volta para a mesma loja.
+async function demoLogin(btn) {
+  const error = $("#login-error");
+  const label = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = "Criando sua loja...";
+  const res = await apiSend("POST", "/auth/demo");
+  if (!res.ok) {
+    btn.disabled = false;
+    btn.innerHTML = label;
+    error.textContent = apiError(res, "Não foi possível criar a conta Demo.");
+    error.hidden = false;
+    return;
+  }
+  storage.set(res.data.access_token, true);
+  applyUser(res.data);
+  state.loggedIn = true;
+  state.page = "Início";
+  withSplash("carregamento", render);
+}
+
+// Copiar para a área de transferência (navigator.clipboard só existe em https/localhost).
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  showToast("Copiado");
 }
 
 document.addEventListener("submit", (event) => {

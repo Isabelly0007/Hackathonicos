@@ -841,3 +841,21 @@ th { text-transform: uppercase; letter-spacing: .08em; font-size: 10px; font-wei
 .login-card #recovery-form .btn + .btn, .login-card > .btn + .back-login { margin-top: 14px; }
 .modal-list .connect-channel { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .modal-list .connect-channel .market-logo { width: 32px; height: 32px; flex: none; }
+
+/* ---------- Conta Demo (login e card "Seus dados de acesso") ---------- */
+.demo-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: #7f93b3; font-size: 12px; }
+.demo-divider:before, .demo-divider:after { content: ""; flex: 1; border-top: 1px solid rgba(180, 210, 255, .18); }
+.login-card .btn.secondary { color: #e8f1ff; background: #0a1524; border-color: rgba(180, 210, 255, .28); }
+.demo-note { color: #9fb3ce; font-size: 12px; line-height: 1.5; text-align: center; margin-top: 10px; }
+.demo-access { padding: 18px 20px; margin-bottom: 18px; border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
+.demo-access .card-head { flex-wrap: wrap; gap: 6px; }
+.demo-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0 12px; }
+.demo-field { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); min-width: 0; }
+.demo-field small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+.demo-field code { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.demo-access p { color: var(--muted); font-size: 13px; line-height: 1.55; margin-bottom: 12px; }
+.demo-access p b { color: var(--text); }
+@media (max-width: 620px) {
+  .demo-fields { grid-template-columns: 1fr; }
+  .demo-access .btn.secondary { width: 100%; justify-content: center; }
+}
