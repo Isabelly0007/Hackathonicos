@@ -14,7 +14,7 @@ Documentação funcional e técnica do **Taylor**, software de gestão de market
 | 6 | [api-backend.md](api-backend.md) | Contratos HTTP para implementação em Python |
 | 7 | [integracoes.md](integracoes.md) | Supabase, Gemini, Telegram, voz, marketplaces e emissão fiscal |
 | 8 | [mapeamento-frontend-backend.md](mapeamento-frontend-backend.md) | Guia tela → funcionalidade → endpoint → entidade |
-| 9 | [pendencias.md](pendencias.md) | Lista consolidada de itens "Pendente de definição" e divergências entre fontes |
+| 9 | [../backend/README.md](../backend/README.md#decisões-tomadas-para-as-pendências-da-documentação) | Decisões tomadas para os itens "Pendente de definição" (a antiga `pendencias.md` foi removida) |
 | — | [diagramas/](diagramas/) | Diagramas UML em Mermaid (casos de uso, sequência, atividades, componentes) e o fluxograma original |
 
 ## Fontes analisadas
@@ -29,7 +29,7 @@ Documentação funcional e técnica do **Taylor**, software de gestão de market
 | Fluxograma "HACKATHONICOS – Fluxograma do Sistema (MVP)" | Especificação | Copiado em [diagramas/fluxograma-mvp.png](diagramas/fluxograma-mvp.png) |
 | Repositório `github.com/isaadsl/Hackathonicos` | Código | Conteúdo idêntico à pasta local analisada |
 
-> **DER:** nenhum DER foi encontrado no repositório nem nos anexos. O modelo de dados em [modelo-dados.md](modelo-dados.md) foi derivado do front-end, do fluxograma e do resumo do projeto e está marcado como **proposta sujeita a validação** (ver [pendencias.md](pendencias.md)).
+> **DER:** nenhum DER foi encontrado no repositório nem nos anexos. O modelo de dados em [modelo-dados.md](modelo-dados.md) foi derivado do front-end, do fluxograma e do resumo do projeto e está marcado como **proposta sujeita a validação**. O modelo implementado está em `backend/db/schema.sql` (ver [../backend/README.md](../backend/README.md)).
 
 ## Legenda de classificação
 
@@ -45,7 +45,13 @@ Usada em todos os arquivos para diferenciar o que existe do que é simulado ou p
 
 ## Situação atual do projeto (resumo técnico)
 
+> Esta documentação foi escrita **antes** do back-end, como especificação. As marcações [PLANEJADO] e
+> "Pendente de definição" dos demais arquivos registram a situação daquele momento; o que já foi
+> implementado e as decisões tomadas estão em [../backend/README.md](../backend/README.md).
+
 - O front-end é **HTML + CSS + JavaScript puro** (sem framework). Todas as telas são geradas por `javascript.js`.
-- Não existe back-end. O objeto `CONFIG` possui `useApi: false` e `apiBase: "/api"`. Com `useApi = true`, as funções do objeto `api` fazem `GET` em `CONFIG.apiBase + caminho` e, em caso de erro, voltam para os dados de exemplo.
-- Apenas **10 chamadas GET** já estão ligadas à camada `api`. Todo o restante (formulários, botões de ação, notificações, configurações, chat) usa dados fixos no código. Os contratos desses pontos estão **propostos** em [api-backend.md](api-backend.md).
-- O comentário no topo do `javascript.js` cita **FastAPI** como back-end esperado.
+- O back-end existe em `backend/` (**Python + FastAPI**) e serve também o front-end no mesmo endereço. O objeto `CONFIG` do `javascript.js` vem com `useApi: true`; publicado ou aberto pelo back-end, `apiBase` é `"/api"`. Se a API falhar, as leituras voltam para os dados de exemplo.
+- O banco é o **Supabase (PostgreSQL)**, com as tabelas no schema `taylor` ([modelo-dados.md](modelo-dados.md) + acréscimos marcados no `backend/db/schema.sql` e no `backend/db/migracoes.sql`).
+- O assistente de IA roda no back-end: o **Gemini** (opcional) identifica a intenção e o back-end monta a resposta com os dados da empresa.
+- O **bot do Telegram** (`bot_estoque/`, Node.js, **@EstoqueLojas_bot**) é um programa à parte: lê e grava nas mesmas tabelas do schema `taylor` e busca as mensagens por *long polling* (não há webhook).
+- **Conta Demo** (`POST /api/auth/demo`): cada visitante ganha uma loja isolada com os dados de exemplo, apagada depois de algumas horas. Ver [api-backend.md](api-backend.md) §3.1.

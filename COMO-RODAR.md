@@ -70,9 +70,11 @@ Quando o ambiente está ativo, aparece **`(.venv)`** no começo da linha do Powe
 
    ```
    DATABASE_URL=postgresql://postgres.khkeojieopvuwbiizkom:<SENHA>@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+   ```
 
-  Copie e cole:
-  
+   Ou copie e cole a linha pronta:
+
+   ```
    DATABASE_URL=postgresql://postgres.khkeojieopvuwbiizkom:hackathonicos2026@aws-0-us-east-1.pooler.supabase.com:5432/postgres
    ```
 
@@ -113,14 +115,14 @@ Quando aparecer `Application startup complete`, está pronto.
 
 ## 7. Abra no navegador
 
-Acesse **http://localhost:8000** e entre com o usuário de teste:
+Acesse **http://localhost:8000** e entre com o usuário de teste (em localhost ele já vem preenchido):
 
 | E-mail | Senha |
 |---|---|
 | `isabela@lojabeta.com.br` | `taylor123` |
 
 Também dá para **criar uma conta nova** na aba "Criar conta". Nesse caso, use um CNPJ válido
-(por exemplo, `11.222.333/0001-81`).
+(por exemplo, `11.222.333/0001-81`). Ou clique em **Entrar com a conta Demo** (veja abaixo).
 
 Outros endereços úteis:
 
@@ -175,14 +177,34 @@ são encerradas.
 
 ---
 
+## Conta Demo (para apresentações)
+
+Na tela de login, **Entrar com a conta Demo** cria na hora uma loja só sua ("Loja Demo 0427", com CNPJ
+válido gerado automaticamente) com todos os dados de exemplo: produtos, pedidos de 90 dias, estoque,
+notas fiscais, integrações simuladas e notificações. Cada pessoa que clica ganha a própria loja; ninguém vê
+o que a outra altera.
+
+- O acesso fica salvo no navegador: reabrir o link (ou escanear o QR code de novo) volta para a mesma loja.
+- No **Início** aparece o card **Seus dados de acesso** com um e-mail e uma senha fáceis de digitar. Eles
+  servem para entrar no bot do Telegram (**@EstoqueLojas_bot**, comando `/login`) e também na tela de login.
+- A loja é **apagada sozinha** depois de `CONTA_DEMO_HORAS` (padrão: 6 horas), e existem no máximo
+  `CONTA_DEMO_MAX` contas ao mesmo tempo (padrão: 200). Os dois ficam no `backend\.env` ou nas variáveis
+  do Render. Cada conta ocupa cerca de 1 MB no banco.
+- Quantas contas estão ativas: http://localhost:8000/api/health (`contas_demo_ativas`).
+
+---
+
 ## Bot do Telegram (`bot_estoque`)
 
-O bot usa **as mesmas tabelas do Taylor** (schema `taylor`): o que é feito no bot (entrada, baixa,
-produto novo) aparece no painel, e vice-versa. O login no bot é o mesmo e-mail e senha do painel.
+O bot é o **@EstoqueLojas_bot** (nome de exibição "Taylor_assistente_bot"). Ele usa **as mesmas tabelas do
+Taylor** (schema `taylor`): o que é feito no bot (entrada, baixa, produto novo) aparece no painel, e
+vice-versa. O login no bot é o mesmo e-mail e senha do painel (inclusive os da conta Demo). O bot busca as
+mensagens no Telegram por *long polling* (não usa webhook).
 
 1. Precisa do **Node.js 20 ou mais novo** (https://nodejs.org).
-2. No arquivo `bot_estoque\.env`, além do `TELEGRAM_TOKEN`, coloque a **mesma** `DATABASE_URL` do
-   `backend\.env` e `DB_SCHEMA=taylor`. (As chaves `SUPABASE_URL`/`SUPABASE_KEY` não são mais usadas.)
+2. Copie `bot_estoque\.env.example` para `bot_estoque\.env`. Além do `TELEGRAM_TOKEN`, coloque a **mesma**
+   `DATABASE_URL` do `backend\.env`, `DB_SCHEMA=taylor` e `DB_POOL_MAX=3`. (As chaves
+   `SUPABASE_URL`/`SUPABASE_KEY` não são mais usadas.)
 3. Instale e ligue:
 
    ```powershell
@@ -191,9 +213,12 @@ produto novo) aparece no painel, e vice-versa. O login no bot é o mesmo e-mail 
    npm start
    ```
 
+   Ao ligar, ele mostra `🤖 Bot @EstoqueLojas_bot ligado ao Taylor...`. Se aparecer outro @, o
+   `CONFIG.telegram` do `javascript.js` precisa apontar para esse bot.
+
 > ⚠️ Deixe ligada **só uma cópia** do bot por token. Se ele já roda no Render, não ligue outra no seu
 > computador: o Telegram entrega cada mensagem para uma cópia só. No Render, configure as mesmas
-> variáveis `DATABASE_URL` e `DB_SCHEMA`.
+> variáveis `DATABASE_URL`, `DB_SCHEMA` e `DB_POOL_MAX`.
 
 Comandos: `/login`, `/estoque`, `/lojas` → `/estoqueloja`, `/novo`, `/entrada`, `/baixa`, `/sair`.
 Ao entrar, o chat fica vinculado ao usuário (aparece em **Configurações › Notificações** no painel) e
@@ -203,6 +228,50 @@ de notificação da empresa.
 **Dados antigos do bot:** a empresa "Loja do Futuro" (tabelas `public`) já foi copiada para o Taylor com
 `python migrar_bot.py --aplicar` (dentro de `backend\`). O usuário `seu_email@provedor.com` entra com a
 senha `taylor123`. Rodar o script de novo não duplica nada; as tabelas `public` não são alteradas.
+
+---
+
+## Publicar no Render (palestra com o público usando junto)
+
+O arquivo `render.yaml` (na raiz) descreve o back-end, que também serve as telas. No Render:
+**New › Blueprint**, escolha o repositório e preencha `DATABASE_URL` (a mesma do `backend\.env`) e, se
+quiser o Gemini, `GEMINI_API_KEY`. O resto já vem configurado:
+
+| Variável | Valor | Por quê |
+|---|---|---|
+| `DEMO_MODE` | `false` | Sem token não há acesso, e o link de "Esqueci minha senha" não aparece na tela |
+| `JWT_SECRET` | gerado pelo Render | Obrigatório com `DEMO_MODE=false`; o mesmo para todos os workers |
+| `WEB_CONCURRENCY` | `2` | Número de processos (workers) do back-end |
+| `DB_POOL_MAX` | `5` | Conexões com o banco **por worker** |
+| `CONTA_DEMO_HORAS` / `CONTA_DEMO_MAX` | `6` / `200` | Validade e limite das contas Demo |
+
+O endereço do site (para o QR code) é o que o Render mostra, por exemplo `https://taylor-api.onrender.com`.
+Fora de localhost o front chama a API no mesmo endereço (`/api`) e o login não vem preenchido.
+
+**Conexões com o banco.** O Session pooler do Supabase tem um limite (**Pool Size**, em Supabase ›
+Database › Settings › Connection pooling; no plano grátis costuma ser 15). A conta é:
+
+```
+WEB_CONCURRENCY × DB_POOL_MAX (back-end) + DB_POOL_MAX (bot) ≤ Pool Size
+        2       ×      5      +      3                    = 13
+```
+
+Se passar do limite, aparece `max clients reached`. Deixe uma folga para quem rodar o sistema no próprio
+computador no mesmo banco. O back-end mostra a conta no log ao ligar.
+
+**No dia:**
+
+- Use um plano **pago** no serviço do back-end (Starter ou maior): o gratuito "dorme" depois de 15 minutos
+  sem uso (o primeiro acesso demora quase 1 minuto) e tem só 0,1 CPU.
+- Abra o site alguns minutos antes de mostrar o QR code, para ele já estar acordado.
+- O bot **não** entra no `render.yaml`: ele já roda como outro serviço no Render, e uma segunda cópia com o
+  mesmo token faria o Telegram entregar as mensagens para uma cópia só. No serviço do bot, adicione
+  `DATABASE_URL`, `DB_SCHEMA=taylor` e `DB_POOL_MAX=3`.
+- O Gemini gratuito aceita poucas perguntas por minuto. Com muita gente, o assistente passa a usar as
+  palavras-chave (continua respondendo estoque, vendas de hoje, pedidos pendentes e estoque baixo).
+- Espaço no banco: cada conta Demo ocupa cerca de 1 MB (o plano grátis do Supabase tem 500 MB).
+
+Teste de carga (150 pessoas ao mesmo tempo, num Postgres local): veja [backend/README.md](backend/README.md#teste-de-carga).
 
 ---
 
@@ -220,6 +289,9 @@ senha `taylor123`. Rodar o script de novo não duplica nada; as tabelas `public`
 | `Não foi possível falar com o servidor` | O sistema está desligado. Refaça o passo 6 e deixe a janela aberta. |
 | `address already in use` / porta 8000 ocupada | Já existe um Taylor ligado em outra janela. Feche essa janela ou aperte Ctrl + C nela. |
 | A tela parece antiga depois de atualizar o código | Aperte **Ctrl + F5** no navegador. |
+| `Todas as contas de demonstração estão em uso` | Chegou ao `CONTA_DEMO_MAX`. Aumente o valor ou espere as contas antigas expirarem. |
+| `Defina JWT_SECRET` ao ligar | Com `DEMO_MODE=false` o segredo não é gerado sozinho: defina `JWT_SECRET` (no Render ele é gerado pelo Blueprint). |
+| `max clients reached` | Conexões demais no Supabase: reduza `WEB_CONCURRENCY` ou `DB_POOL_MAX` (veja "Publicar no Render"). |
 
 ## Quer só ver as telas, sem banco?
 

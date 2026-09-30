@@ -1,6 +1,10 @@
 # Modelo de dados
 
-> **Atenção — DER não encontrado.** A tarefa pede o DER como referência principal, mas nenhum DER foi localizado no repositório `isaadsl/Hackathonicos` nem nos anexos (há apenas o fluxograma e o resumo do projeto). O modelo abaixo é uma **proposta derivada** das telas do front-end, do fluxograma (lane "Banco de Dados": *armazena dados da integração da empresa* e *atualiza e centraliza produtos, pedidos e estoque*) e do resumo do projeto. **Validar com a equipe antes de criar as tabelas** — item registrado em [pendencias.md](pendencias.md).
+> **Atenção — DER não encontrado.** A tarefa pede o DER como referência principal, mas nenhum DER foi localizado no repositório `isaadsl/Hackathonicos` nem nos anexos (há apenas o fluxograma e o resumo do projeto). O modelo abaixo é uma **proposta derivada** das telas do front-end, do fluxograma (lane "Banco de Dados": *armazena dados da integração da empresa* e *atualiza e centraliza produtos, pedidos e estoque*) e do resumo do projeto. **Validar com a equipe antes de criar as tabelas.**
+>
+> **Situação atual:** o modelo foi implementado em `backend/db/schema.sql` (schema `taylor`), com os acréscimos
+> marcados como "ACRÉSCIMO" lá e em `backend/db/migracoes.sql`. Os acréscimos posteriores a esta proposta
+> (`redefinicao_senha` e `conta_demo`) estão descritos nas seções 2.18 e 2.19.
 
 Banco previsto: **Supabase (PostgreSQL)**. Convenções propostas:
 
@@ -444,7 +448,43 @@ Liga um usuário a um chat do Telegram para consultas e alertas. **[PLANEJADO]**
 | username | text | "@lojabeta_bot" exibido no front |
 | vinculado_em | timestamptz | "Alertas ativos desde 12/09/2026" |
 
-> Processo de vínculo (código de pareamento, deep link `/start <token>` etc.): Pendente de definição.
+> Processo de vínculo: **implementado** pelo bot (`bot_estoque/`). O comando `/login` confere o e-mail e a senha
+> do painel e grava o `chat_id`; `/sair` apaga o vínculo.
+
+### 2.18 `redefinicao_senha` (ACRÉSCIMO — "Esqueci minha senha")
+
+Links de redefinição de senha. Só o sha256 do token é guardado; uso único e validade curta (`REDEFINICAO_MINUTOS`).
+Trocar a senha grava `usuario.senha_alterada_em` (ACRÉSCIMO), e os tokens de sessão emitidos antes deixam de valer.
+
+| Atributo | Tipo | Restrições |
+|---|---|---|
+| id | uuid | PK |
+| usuario_id | uuid | NN, FK → usuario.id (cascade) |
+| token_hash | text | NN, UK (sha256 do token do link) |
+| expira_em | timestamptz | NN |
+| usada_em | timestamptz | preenchido no uso (e em todos os links pendentes do usuário) |
+| criado_em | timestamptz | NN (limite de 3 pedidos a cada 15 min) |
+
+### 2.19 `conta_demo` (ACRÉSCIMO — conta Demo)
+
+Marca as empresas criadas pelo botão "Entrar com a conta Demo" (`POST /api/auth/demo`). Cada conta é um usuário
+"Demo" + empresa "Loja Demo NNNN" com os dados de exemplo (função `popular_empresa_demo`) e é apagada depois de
+`CONTA_DEMO_HORAS` (função `excluir_conta_demo`). No máximo `CONTA_DEMO_MAX` contas ativas.
+
+| Atributo | Tipo | Restrições |
+|---|---|---|
+| empresa_id | uuid | PK, FK → empresa.id (cascade) |
+| usuario_id | uuid | NN, UK, FK → usuario.id (cascade) |
+| numero | integer | NN, UK (sequência `conta_demo_numero_seq`; forma "Loja Demo 0427" e `demo0427@taylor.demo`) |
+| senha | text | NN — em texto puro **de propósito**: conta descartável, a senha é mostrada no painel para o `/login` do bot. O login usa `usuario.senha_hash` (bcrypt). |
+| criada_em | timestamptz | NN |
+| expira_em | timestamptz | NN, indexado (limpeza) |
+
+Ordem de exclusão em `excluir_conta_demo` (há FKs sem cascata: `item_pedido → produto`, `pedido → integracao`,
+`pedido → cliente`): `item_pedido` → `nota_fiscal` → `pedido` → `anuncio` → `movimento_estoque` → `produto` →
+`cliente` → `sincronizacao` → `integracao` → `empresa` (cascata: notificações, preferências, certificado,
+`usuario_empresa`, `vinculo_telegram`, `conta_demo`) → `usuario`. A função não apaga empresas que não estejam em
+`conta_demo`.
 
 ## 3. Relacionamentos e cardinalidades
 
@@ -467,7 +507,9 @@ Liga um usuário a um chat do Telegram para consultas e alertas. **[PLANEJADO]**
 | empresa / integracao — sincronizacao | 1:N | |
 | empresa — notificacao | 1:N | |
 | empresa — preferencia_notificacao | 1:N (5 eventos) | |
-| usuario — vinculo_telegram | 1:0..1 | [PLANEJADO] |
+| usuario — vinculo_telegram | 1:0..1 | Vínculo feito pelo `/login` do bot |
+| usuario — redefinicao_senha | 1:N | ACRÉSCIMO |
+| empresa — conta_demo | 1:0..1 | ACRÉSCIMO: só as empresas da conta Demo |
 
 ## 4. Restrições e regras no banco
 

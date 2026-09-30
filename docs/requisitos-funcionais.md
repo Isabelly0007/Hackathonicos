@@ -472,12 +472,12 @@ Atores usados: **Lojista** (usuário autenticado da empresa), **Visitante** (nã
 ### RF040 — Consultar a operação e receber alertas pelo Telegram
 | Item | Descrição |
 |---|---|
-| Descrição | Bot `taylor_assistente_bot`: responde perguntas como "vendas de hoje" ou "estoque baixo" com os mesmos dados do painel (FAQ) e envia alertas de estoque, novos pedidos e NF-e rejeitadas (card do Telegram). |
+| Descrição | Bot `@EstoqueLojas_bot` (nome de exibição "Taylor_assistente_bot"): responde perguntas como "vendas de hoje" ou "estoque baixo" com os mesmos dados do painel (FAQ) e envia alertas de estoque, novos pedidos e NF-e rejeitadas (card do Telegram). |
 | Ator | Lojista; Telegram; Gemini |
 | Entrada | Mensagem enviada ao bot |
 | Processamento esperado | Fluxograma: Telegram recebe a mensagem do lojista → Gemini identifica a intenção → back-end consulta/executa → resposta enviada via Telegram. Alertas conforme RN031. Forma de vincular a conta do Telegram ao usuário: Pendente de definição. |
 | Saída | Resposta ou alerta no Telegram. |
-| Situação atual | [PLANEJADO] — existem somente links para `https://t.me/taylor_assistente_bot`. |
+| Situação atual | [REAL] — `bot_estoque/` (Node.js + Telegraf, long polling): `/login` com e-mail e senha do painel (vínculo em `vinculo_telegram`), consulta de estoque por comandos, entrada/baixa, produto novo, aviso de novo pedido e resumo às 9h, 13h e 18h. Link no front: `https://t.me/EstoqueLojas_bot`. Alertas de estoque e NF-e rejeitada pelo Telegram: [PLANEJADO]. |
 
 ---
 

@@ -55,7 +55,7 @@ flowchart TB
     B6 --> U5
 ```
 
-> Divergência registrada: no fluxograma original o passo do usuário é "Envia mensagem no **WhatsApp**", mas a seta vai para a raia **Telegram**. Aqui foi representado como Telegram (ver [../pendencias.md](../pendencias.md)).
+> Divergência registrada: no fluxograma original o passo do usuário é "Envia mensagem no **WhatsApp**", mas a seta vai para a raia **Telegram**. Aqui foi representado como Telegram, como no bot implementado (`bot_estoque/`).
 
 ## 2. Acesso ao sistema (login e cadastro)
 

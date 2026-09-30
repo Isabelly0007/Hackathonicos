@@ -30,14 +30,17 @@ Usuários dentro da empresa (representados na tela **Configurações › Equipe*
 ```mermaid
 flowchart LR
     L["Lojista"] --> T["Taylor<br/>(front-end)"]
-    T --> B["Back-end Python<br/>(a implementar)"]
-    B --> DB[("Supabase<br/>PostgreSQL")]
-    B --> MK["Marketplaces<br/>ML / Shopee / Magalu<br/>[SIMULADO no MVP]"]
-    B --> IA["Gemini<br/>[PLANEJADO]"]
-    B --> TG["Bot Telegram<br/>[PLANEJADO]"]
+    T --> B["Back-end FastAPI<br/>(backend/)"]
+    B --> DB[("Supabase<br/>PostgreSQL · schema taylor")]
+    B --> MK["Marketplaces<br/>ML / Shopee / Magalu / TikTok Shop<br/>[SIMULADO no MVP]"]
+    B --> IA["Gemini<br/>(opcional)"]
     B --> NF["Emissão fiscal NF-e<br/>[SIMULADO]"]
-    L -. "mensagens" .-> TG
+    L -. "mensagens" .-> TG["Bot Telegram @EstoqueLojas_bot<br/>(bot_estoque, Node)"]
+    TG --> DB
 ```
+
+O back-end também serve o front-end (as telas) no mesmo endereço. O bot do Telegram é um programa à parte que
+lê e grava nas mesmas tabelas do banco (schema `taylor`) e busca as mensagens no Telegram por *long polling*.
 
 Fluxo resumido do sistema:
 
@@ -46,24 +49,25 @@ Fluxo resumido do sistema:
 3. O back-end **consulta produtos, pedidos e estoque** dos canais e os armazena de forma centralizada no banco.
 4. O front-end exibe o **dashboard** e as telas de produtos, pedidos, estoque, notas fiscais, marketplaces, integrações e relatórios com os dados unificados.
 5. O lojista pode **gerenciar catálogo e estoque**; o Taylor sincroniza o estoque central com os canais.
-6. O lojista pode conversar com o **assistente de IA** (no sistema, por texto ou voz, ou pelo Telegram). A IA (Gemini) identifica a intenção, o back-end consulta os dados ou executa a ação e gera a resposta.
-7. Alertas (estoque, pedidos, NF-e, integrações) são exibidos em **Notificações** e podem ser enviados ao **Telegram**, e-mail ou push.
+6. O lojista pode conversar com o **assistente de IA** no sistema, por texto ou voz. A IA (Gemini, quando há `GEMINI_API_KEY`) identifica a intenção; o back-end consulta os dados e gera a resposta. Sem a chave, a intenção vem de palavras-chave.
+7. No **Telegram** (@EstoqueLojas_bot), o lojista entra com o mesmo e-mail e senha do painel e consulta ou atualiza o estoque por comandos (`/estoque`, `/entrada`, `/baixa`, `/novo`...).
+8. Alertas (estoque, pedidos, NF-e, integrações) são exibidos em **Notificações**. O bot envia no Telegram os avisos de **novo pedido** e o **resumo** das 9h, 13h e 18h. E-mail e push: [PLANEJADO].
 
 ## 5. Escopo do MVP
 
-Funcionalidades do MVP listadas no resumo do projeto, cruzadas com o que existe no front-end:
+Funcionalidades do MVP listadas no resumo do projeto, cruzadas com o que existe hoje (front-end + back-end + bot):
 
-| # | Funcionalidade do MVP (resumo do projeto) | Situação no front-end | Classificação |
+| # | Funcionalidade do MVP (resumo do projeto) | Situação atual | Classificação |
 |---|---|---|---|
-| 1 | Dashboard com visão geral da operação | Tela **Início** completa, com dados de exemplo | [SIMULADO] |
-| 2 | Gestão de produtos, preços, SKU, estoque atual e estoque mínimo | Listagem de produtos e tela de estoque; botão "Novo produto" sem formulário | [SIMULADO] / [VISUAL] |
-| 3 | Controle e alertas de produtos com estoque baixo | Alertas no dashboard, indicadores e status na tela Estoque | [SIMULADO] |
-| 4 | Pedidos e vendas de diferentes canais simulados | Tela **Pedidos** e gráficos de vendas | [SIMULADO] |
-| 5 | Simulação da sincronização de estoque entre marketplaces | Botão "Sincronizar agora" (animação local), colunas de estoque por canal, divergências | [SIMULADO] |
-| 6 | Assistente com IA utilizando Gemini | Painel de chat com respostas fixas | [SIMULADO] (Gemini [PLANEJADO]) |
-| 7 | Interação com o assistente por texto e voz, com resposta visual e sonora | Somente texto; **não há interface de voz** | Texto [SIMULADO] / Voz [PLANEJADO] |
-| 8 | Bot no Telegram para consultas sobre a operação | Links para `t.me/taylor_assistente_bot`; nenhum bot implementado | [PLANEJADO] |
-| 9 | Simulação do fluxo de emissão de NF-e e documentos fiscais | Tela **Notas fiscais** completa com dados de exemplo | [SIMULADO] |
+| 1 | Dashboard com visão geral da operação | Tela **Início** com indicadores, gráficos e alertas calculados no back-end a partir do banco | [REAL] |
+| 2 | Gestão de produtos, preços, SKU, estoque atual e estoque mínimo | Listagem, novo produto, edição e exclusão gravam no banco | [REAL] |
+| 3 | Controle e alertas de produtos com estoque baixo | Status, alertas do dashboard e notificações calculados no back-end | [REAL] |
+| 4 | Pedidos e vendas de diferentes canais simulados | Pedidos importados pelo simulador de marketplace; avanço de status e cancelamento gravam no banco | [SIMULADO] (canais) |
+| 5 | Simulação da sincronização de estoque entre marketplaces | "Sincronizar agora" envia o estoque central aos canais simulados e detecta divergências | [SIMULADO] |
+| 6 | Assistente com IA utilizando Gemini | Chat responde com dados reais; o Gemini identifica a intenção quando há `GEMINI_API_KEY` (sem chave: palavras-chave) | [REAL] |
+| 7 | Interação com o assistente por texto e voz, com resposta visual e sonora | Texto e voz (microfone no chat, Web Speech API) com resposta falada | [REAL] |
+| 8 | Bot no Telegram para consultas sobre a operação | Bot `@EstoqueLojas_bot` (`bot_estoque/`, long polling): login, estoque, entrada/baixa, novo produto, aviso de novo pedido e resumo periódico | [REAL] |
+| 9 | Simulação do fluxo de emissão de NF-e e documentos fiscais | Validação fiscal no back-end e SEFAZ simulada (autoriza ou rejeita) | [SIMULADO] |
 
 (Implementação e prioridade **Pendente de definição**):
 
@@ -78,16 +82,20 @@ Funcionalidades do MVP listadas no resumo do projeto, cruzadas com o que existe 
 | Área | Planejado (resumo do projeto) | Encontrado no repositório |
 |---|---|---|
 | Front-end | React + Vite | HTML + CSS + JavaScript puro |
-| Back-end | Python | Não existe; comentário no front cita FastAPI |
-| Banco de dados | Supabase | Não existe |
-| IA | Gemini API | Não existe; respostas fixas no front |
-| Bot | Telegram | Somente link externo |
-| Interface do assistente | Texto + voz | Somente texto |
+| Back-end | Python | Python + FastAPI (`backend/`), que também serve o front |
+| Banco de dados | Supabase | Supabase (PostgreSQL), schema `taylor`, conexão direta pelo Session pooler |
+| IA | Gemini API | Gemini (REST, opcional) identifica a intenção; a resposta é montada pelo back-end |
+| Bot | Telegram | Node.js + Telegraf (`bot_estoque/`), long polling, mesmas tabelas do schema `taylor` |
+| Interface do assistente | Texto + voz | Texto + voz (Web Speech API no navegador) |
 
 # Taylor (HTML + CSS + JavaScript)
 
 **Como rodar:** siga o passo a passo em [COMO-RODAR.md](COMO-RODAR.md). O back-end serve o sistema em
-http://localhost:8000 (login de teste: `isabela@lojabeta.com.br` / `taylor123`).
+http://localhost:8000 (login de teste: `isabela@lojabeta.com.br` / `taylor123`, que só vem preenchido em localhost).
+
+**Conta Demo:** na tela de login, **Entrar com a conta Demo** cria uma loja de exemplo só sua, com todos os
+dados, e mostra no Início o e-mail e a senha para usar também no bot do Telegram (@EstoqueLojas_bot). Feito
+para apresentações: cada pessoa que abre o link tem a própria loja. Detalhes em [COMO-RODAR.md](COMO-RODAR.md).
 
 Só para ver as telas com dados de exemplo, sem back-end: mude `CONFIG.useApi` para `false` no
 `javascript.js` e dê dois cliques em `index.html`.
@@ -96,12 +104,16 @@ Só para ver as telas com dados de exemplo, sem back-end: mude `CONFIG.useApi` p
 - `index.html`  -> página base (só carrega o CSS e o JS).
 - `style.css`   -> todas as cores, tamanhos e o layout responsivo.
 - `javascript.js` -> telas, dados de exemplo, ações e chat.
-- `assets/logo.png` -> logo (troque o arquivo para mudar a logo).
+- `img/logo.svg` -> logo usada no sistema (`CONFIG.logo`); `img/` também guarda as logos dos marketplaces.
+- `taylor_voice/` -> protótipo do assistente por voz (http://localhost:8000/taylor_voice/).
+- `backend/` -> back-end FastAPI ([backend/README.md](backend/README.md)).
+- `bot_estoque/` -> bot do Telegram.
 
 ## O que editar
 - Cores: variáveis `:root` no começo do `style.css` (tema claro em `.app-shell.light`).
-- Nome da marca, logo e conexão com backend: bloco `CONFIG` no início do `javascript.js`.
+- Nome da marca, logo, link do bot (`CONFIG.telegram`) e conexão com backend: bloco `CONFIG` no início do `javascript.js`.
 - Números e textos de exemplo: seção "DADOS DE EXEMPLO" do `javascript.js`.
 - Backend: `CONFIG.useApi` já vem `true`. Cada função do objeto `api` chama um endpoint
-  (ex.: `/dashboard/stats?period=Hoje`) e, se falhar, volta para os dados de exemplo.
+  (ex.: `/dashboard/stats?period=Hoje`) e, se falhar, volta para os dados de exemplo. Publicado fora de
+  localhost, o front chama `/api` no mesmo endereço.
 - Login de teste: `isabela@lojabeta.com.br` / `taylor123` (com `useApi: false`, qualquer e-mail e senha entram).

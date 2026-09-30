@@ -2,7 +2,7 @@
 
 ## 1. Arquitetura alvo do MVP
 
-Componentes **existentes** (front-end) e **a implementar** (back-end e integrações). Classificação conforme a [legenda](../README.md#legenda-de-classificação).
+Componentes planejados antes do back-end (front-end existente; back-end e integrações a implementar naquele momento). Hoje o back-end (`backend/`) e o bot (`bot_estoque/`) existem: veja a situação de cada interface na seção 2. Classificação conforme a [legenda](../README.md#legenda-de-classificação).
 
 ```mermaid
 flowchart LR
@@ -65,17 +65,22 @@ flowchart LR
     TGAPI -- "webhook" --> ROUT
 ```
 
+> **Como ficou implementado:** o Telegram não passa pelo back-end. O bot é um programa à parte (`bot_estoque/`,
+> Node.js + Telegraf, `@EstoqueLojas_bot`) que busca as mensagens por **long polling** e lê e grava direto no
+> PostgreSQL do Supabase (schema `taylor`), as mesmas tabelas do back-end. O webhook do diagrama não é usado.
+
 ## 2. Interfaces entre componentes
 
 | De → Para | Interface | Situação |
 |---|---|---|
 | Telas → camada `api` | Funções `api.stats`, `api.sales`, `api.orderStatuses`, `api.stockAlerts`, `api.channels`, `api.products`, `api.orders`, `api.stock`, `api.invoices`, `api.marketplaces` | [REAL] |
-| Camada `api` → back-end | HTTP `GET` em `CONFIG.apiBase + caminho`; fallback para dados de exemplo em caso de erro | [REAL] no front; back-end [PLANEJADO] |
-| Telas/eventos → back-end (escrita) | `POST/PUT/PATCH/DELETE` descritos em [../api-backend.md](../api-backend.md#3-contratos-propostos-novos) | [PLANEJADO] — exige ajuste no front |
-| Back-end → Supabase | SQL/PostgREST via `supabase-py` ou driver PostgreSQL | [PLANEJADO] |
-| Back-end → Gemini | API do Gemini (chave em variável de ambiente) | [PLANEJADO] |
-| Telegram ↔ back-end | Webhook de entrada + `sendMessage` | [PLANEJADO] |
-| Front → Telegram | Link `https://t.me/taylor_assistente_bot` (nova aba) | [REAL] (somente link) |
+| Camada `api` → back-end | HTTP em `CONFIG.apiBase + caminho` (`/api` no mesmo endereço), com o token JWT; fallback para dados de exemplo em caso de erro | [REAL] |
+| Telas/eventos → back-end (escrita) | `POST/PUT/PATCH/DELETE` descritos em [../api-backend.md](../api-backend.md#3-contratos-propostos-novos) | [REAL] |
+| Back-end → Supabase | SQL direto no PostgreSQL (psycopg, Session pooler, `search_path = taylor`) | [REAL] |
+| Back-end → Gemini | API REST do Gemini (chave em `GEMINI_API_KEY`), só para identificar a intenção | [REAL] (opcional) |
+| Telegram ↔ bot `bot_estoque` | Long polling (`getUpdates`) + `sendMessage`; o bot lê e grava direto no PostgreSQL (schema `taylor`) | [REAL] |
+| Telegram ↔ back-end | Webhook de entrada | Não usado (o bot faz esse papel) |
+| Front → Telegram | Link `https://t.me/EstoqueLojas_bot` (`CONFIG.telegram`, nova aba) | [REAL] |
 | Back-end → marketplaces | Adaptador simulado com interface compatível com OAuth/API real | [SIMULADO] |
 | Back-end → SEFAZ | Adaptador fiscal simulado | [SIMULADO] |
 

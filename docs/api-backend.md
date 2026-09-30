@@ -306,10 +306,32 @@ Objetivo: encerrar sessão (RF003). Response 204. Códigos: 204, 401.
 
 #### `GET /api/auth/me`
 Objetivo: dados do usuário e empresa ativa (substitui `currentUser`: nome, empresa, iniciais; sidebar "Plano Pro").
-Response 200: `{ "user": {...}, "company": {...}, "companies": [ { "id": "uuid", "name": "Loja Beta" } ] }`. Códigos: 200, 401.
+Response 200: `{ "user": {...}, "company": {...}, "companies": [ { "id": "uuid", "name": "Loja Beta" } ], "demo": null }`. Códigos: 200, 401.
+`demo` só vem preenchido na conta Demo (ver abaixo). Token de um usuário que não existe mais (conta Demo apagada): 401.
 
-#### `POST /api/auth/forgot-password` — Pendente de definição
-Request: `{ "email": "..." }`. Response 202. Fluxo completo não definido (RF004).
+#### `POST /api/auth/demo` — implementado (conta Demo)
+Objetivo: botão "Entrar com a conta Demo". Cria uma conta isolada para um visitante e já entra nela: usuário "Demo"
+(`demoNNNN@taylor.demo`, senha fácil de digitar), empresa "Loja Demo NNNN" com CNPJ válido gerado e todos os dados de
+exemplo. Isolamento por `empresa_id` (RN003), como qualquer empresa.
+Request: sem corpo.
+Response 201: mesmo corpo do login, mais:
+```json
+{ "demo": { "email": "demo0427@taylor.demo", "password": "lua4821", "expires_at": "2026-09-30T20:15:00-03:00" } }
+```
+O token vence em `expires_at`, quando a conta é apagada (`CONTA_DEMO_HORAS`). O front guarda o token no
+`localStorage` e mostra o e-mail e a senha no card "Seus dados de acesso" (para o `/login` do bot do Telegram).
+Códigos: 201, 503 (`LIMITE_CONTAS_DEMO` quando há `CONTA_DEMO_MAX` contas ativas; `CONTA_DEMO_INDISPONIVEL`),
+403 (`CONTA_DEMO_DESLIGADA`, com `CONTA_DEMO_MAX=0`).
+
+#### `POST /api/auth/forgot-password` — implementado
+Request: `{ "email": "..." }`. Response 202, sempre a mesma resposta (não revela se o e-mail existe):
+`{ "detail": "...", "email_configured": false }`. O link `APP_URL/#redefinir-senha=<token>` vale
+`REDEFINICAO_MINUTOS` e é de uso único; sem SMTP vai para o log do servidor e, com `DEMO_MODE=true`, também
+volta em `demo_link`. Limite: 3 pedidos a cada 15 minutos. Contas Demo não recebem link.
+
+#### `POST /api/auth/reset-password/check` e `POST /api/auth/reset-password` — implementados
+`{ "token": "..." }` → 200 `{ "valid": true, "email": "is*****@lojabeta.com.br" }` ou 400 `LINK_INVALIDO`.
+`{ "token": "...", "password": "..." }` → 200; troca a senha, invalida os links pendentes e encerra as sessões abertas.
 
 ### 3.2 Dashboard e canais
 
@@ -695,7 +717,12 @@ Response 200: `["Consultar estoque", "Vendas de hoje", "Pedidos pendentes", "Est
 Se a conversão fala↔texto ocorrer **no navegador**, o back-end usa apenas `POST /api/assistant/messages` com `input_mode: "voice"`. Se ocorrer **no back-end**, proposta:
 `POST /api/assistant/voice` (multipart, campo `audio`) → `{ "transcript": "...", "reply": "...", "audio_url": "..." }`. Escolha: Pendente de definição (ver [integracoes.md](integracoes.md#4-reconhecimento-e-interação-por-voz)).
 
-### 3.12 Telegram — [PLANEJADO]
+### 3.12 Telegram — [PLANEJADO] (não usado)
+
+> **Situação atual:** o bot foi implementado fora do back-end, em `bot_estoque/` (Node.js + Telegraf,
+> `@EstoqueLojas_bot`). Ele busca as mensagens por **long polling** e lê e grava direto nas tabelas do schema
+> `taylor`; o vínculo é feito pelo comando `/login` (e-mail e senha do painel). As rotas abaixo ficaram só como
+> proposta e **não existem** no back-end.
 
 #### `POST /api/telegram/webhook`
 Objetivo: receber atualizações do bot (RF040). Chamado pelo Telegram, não pelo front. Validar o cabeçalho `X-Telegram-Bot-Api-Secret-Token`.
@@ -704,7 +731,7 @@ Processamento: localizar `vinculo_telegram` pelo `chat.id` → mesmo fluxo de `P
 Response 200 `{}` (sempre 200 para o Telegram não reenviar). Chat não vinculado: resposta orientando o vínculo — Pendente de definição.
 
 #### `POST /api/telegram/link` — Pendente de definição
-Gera o código/link de vínculo entre usuário e chat. Response: `{ "deep_link": "https://t.me/taylor_assistente_bot?start=<token>" }`.
+Gera o código/link de vínculo entre usuário e chat. Response: `{ "deep_link": "https://t.me/EstoqueLojas_bot?start=<token>" }`.
 
 ### 3.13 Ajuda e busca
 
