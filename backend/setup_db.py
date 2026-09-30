@@ -32,7 +32,8 @@ def main() -> None:
     parser.add_argument("--gerar-sql", metavar="ARQUIVO",
                         help="só gera um .sql (schema + seed) para colar no SQL Editor do Supabase")
     args = parser.parse_args()
-    garantir_jwt_secret()
+    if settings.demo_mode:  # em produção o JWT_SECRET vem da variável de ambiente
+        garantir_jwt_secret()
 
     if args.gerar_sql:
         Path(args.gerar_sql).write_text(_sql("schema.sql") + "\n\n" + _sql("migracoes.sql") + "\n\n" + _sql("seed.sql"), encoding="utf-8")

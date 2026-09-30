@@ -16,10 +16,21 @@ from . import estoque, notificacoes, pedidos
 
 log = logging.getLogger("taylor.sync")
 
+SQL_PRESA = "iniciada_em < now() - interval '2 minutes'"
+
 
 def iniciar(empresa_id: UUID, tipo: str, integracao_id: UUID | None = None) -> dict:
     try:
         with db.transacao() as conn:
+            # Uma sincronização leva segundos: "em andamento" há mais de 2 minutos ficou presa
+            # (o servidor reiniciou no meio dela) e não pode bloquear a nova.
+            conn.execute(
+                f"""
+                update sincronizacao set status = 'erro', concluida_em = now()
+                 where empresa_id = %s and status = 'em_andamento' and {SQL_PRESA}
+                """,
+                (empresa_id,),
+            )
             return db.um(
                 """
                 insert into sincronizacao (empresa_id, integracao_id, tipo)

@@ -21,6 +21,8 @@ os.environ.update({
     "DEMO_MODE": "true",
     "SEFAZ_SEGUNDOS_PROCESSAMENTO": "0",
     "GEMINI_API_KEY": "",
+    "CONTA_DEMO_HORAS": "2",
+    "CONTA_DEMO_MAX": "50",
 })
 
 BACKEND = Path(__file__).resolve().parent.parent

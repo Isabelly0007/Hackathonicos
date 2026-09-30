@@ -87,9 +87,10 @@ def test_tabelas_posicionais(client, h):
     assert len(pedidos) == 50 and all(len(p) == 7 and p[6] in STATUS_PEDIDO and p[0].startswith("#") for p in pedidos)
 
     estoque = client.get("/api/stock", headers=h).json()
-    assert all(len(e) == 8 and e[7] in STATUS_ESTOQUE for e in estoque)
+    # [nome, sku, central, mínimo, ML, Shopee, Magalu, TikTok Shop, status]
+    assert all(len(e) == 9 and e[8] in STATUS_ESTOQUE for e in estoque)
     mochila = next(e for e in estoque if e[1] == "MOC012")
-    assert mochila[2:8] == ["12", "8", "12", "10", "12", "Divergência detectada"]
+    assert mochila[2:9] == ["12", "8", "12", "10", "12", "—", "Divergência detectada"]  # TikTok Shop não conectado
     assert next(e for e in estoque if e[1] == "MOC013")[5] == "—"  # sem anúncio na Shopee
 
     notas = client.get("/api/invoices", headers=h).json()
@@ -193,6 +194,14 @@ def test_sincronizar_estoque(client, h):
                       headers=h).json()[0]["title"] == "Sincronização concluída"
 
 
+def test_sincronizacao_presa_nao_bloqueia(client, h):
+    # O servidor reiniciou no meio de uma sincronização: ela ficou "em andamento" para sempre.
+    presa = sql("insert into sincronizacao (empresa_id, tipo, iniciada_em) "
+                "values ('00000000-0000-4000-a000-000000000001', 'estoque', now() - interval '5 minutes') returning id")[0][0]
+    assert client.post("/api/stock/sync", headers=h).status_code == 202
+    assert sql("select status from sincronizacao where id = %s", (presa,))[0][0] == "erro"
+
+
 # ---------- Pedidos ----------
 
 def test_sincronizar_pedidos_baixa_estoque(client, h):
@@ -214,7 +223,10 @@ def test_cancelar_devolve_estoque(client, h):
     pedido_id, sku, qtd = sql(
         "select p.id, pr.sku, ip.quantidade from pedido p join item_pedido ip on ip.pedido_id = p.id "
         "join produto pr on pr.id = ip.produto_id where p.status = 'aguardando' "
-        "and (select count(*) from item_pedido where pedido_id = p.id) = 1 limit 1")[0]
+        "and (select count(*) from item_pedido where pedido_id = p.id) = 1 "
+        # Sem NF já enviada à SEFAZ (o seed deixa uma em processamento no pedido mais recente).
+        "and not exists (select 1 from nota_fiscal nf where nf.pedido_id = p.id "
+        "                and nf.status in ('processando', 'autorizada')) limit 1")[0]
     antes = estoque_de(sku)
     r = client.patch(f"/api/orders/{pedido_id}/status", json={"status": "cancelado"}, headers=h)
     assert r.status_code == 200 and r.json()["status"] == "cancelado"

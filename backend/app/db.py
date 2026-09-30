@@ -23,8 +23,8 @@ def _configurar(conn: Connection) -> None:
 
 pool = ConnectionPool(
     settings.database_url,
-    min_size=1,
-    max_size=10,
+    min_size=settings.db_pool_min,
+    max_size=settings.db_pool_max,
     open=False,
     configure=_configurar,
     # prepare_threshold=None: compatível com o pooler do Supabase (Supavisor).

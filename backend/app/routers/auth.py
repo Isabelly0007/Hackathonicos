@@ -14,6 +14,7 @@ from ..cnpj import validar_cnpj
 from ..config import settings
 from ..erros import ErroApi
 from ..formatacao import iniciais
+from ..services import contas_demo
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 log = logging.getLogger("taylor.auth")
@@ -51,29 +52,36 @@ class Redefinicao(TokenRedefinicao):
 
 
 def _perfil(usuario_id: UUID) -> dict:
-    u = db.um("select id, nome, email from usuario where id = %s", (usuario_id,))
-    if not u:
-        raise ErroApi(401, "TOKEN_INVALIDO", "Usuário não encontrado.")
-    empresas = db.todos(
-        """
-        select e.id, e.nome_fantasia as name, e.cnpj
-          from usuario_empresa ue join empresa e on e.id = ue.empresa_id
-         where ue.usuario_id = %s and ue.status = 'ativo'
-         order by ue.criado_em
-        """,
-        (usuario_id,),
-    )
+    with db.transacao() as conn:  # uma conexão para as três consultas
+        u = db.um("select id, nome, email from usuario where id = %s", (usuario_id,), conn)
+        if not u:
+            raise ErroApi(401, "TOKEN_INVALIDO", "Usuário não encontrado.")
+        empresas = db.todos(
+            """
+            select e.id, e.nome_fantasia as name, e.cnpj
+              from usuario_empresa ue join empresa e on e.id = ue.empresa_id
+             where ue.usuario_id = %s and ue.status = 'ativo'
+             order by ue.criado_em
+            """,
+            (usuario_id,),
+            conn,
+        )
+        demo = contas_demo.dados_de_acesso(usuario_id, conn)
     ativa = empresas[0] if empresas else None
     return {
         "user": {"id": u["id"], "name": u["nome"], "email": u["email"], "initials": iniciais(u["nome"])},
         "company": {**ativa, "plan": "Pro"} if ativa else None,
         "companies": [{"id": e["id"], "name": e["name"]} for e in empresas],
+        # Conta Demo: e-mail, senha (para o /login do bot) e quando a loja será apagada. null nas demais.
+        "demo": demo,
     }
 
 
 def _sessao(usuario_id: UUID, lembrar: bool) -> dict:
-    token, expira = auth.emitir_token(usuario_id, lembrar)
-    return {"access_token": token, "token_type": "bearer", "expires_in": expira, **_perfil(usuario_id)}
+    perfil = _perfil(usuario_id)
+    vencimento = perfil["demo"]["expires_at"] if perfil["demo"] else None  # conta Demo: token vence com a conta
+    token, expira = auth.emitir_token(usuario_id, lembrar, vencimento)
+    return {"access_token": token, "token_type": "bearer", "expires_in": expira, **perfil}
 
 
 @router.post("/register", status_code=201)
@@ -113,6 +121,16 @@ def entrar(dados: Login):
     if not u or not auth.senha_confere(dados.password, u["senha_hash"]):
         raise ErroApi(401, "CREDENCIAIS_INVALIDAS", "E-mail ou senha incorretos.")
     return _sessao(u["id"], dados.remember)
+
+
+@router.post("/demo", status_code=201)
+def entrar_demo():
+    """Cria uma conta Demo isolada (loja com os dados de exemplo) e já entra nela.
+
+    O front guarda o token no localStorage: reabrir o link volta para a mesma conta.
+    """
+    conta = contas_demo.criar()
+    return _sessao(conta["usuario_id"], lembrar=True)
 
 
 @router.post("/logout", status_code=204)
@@ -156,8 +174,14 @@ def esqueci_senha(dados: PedidoRedefinicao, tarefas: BackgroundTasks):
                   f"Ele vale por {minutos} minutos.",
         "email_configured": correio.configurado(),
     }
-    usuario = db.um("select id, nome from usuario where email = %s", (email,))
-    if not usuario:
+    usuario = db.um(
+        """
+        select u.id, u.nome from usuario u
+         where u.email = %s and not exists (select 1 from conta_demo cd where cd.usuario_id = u.id)
+        """,
+        (email,),
+    )
+    if not usuario:  # e-mail inexistente ou conta Demo (o endereço @taylor.demo não recebe e-mail)
         return resposta
 
     token = secrets.token_urlsafe(32)
