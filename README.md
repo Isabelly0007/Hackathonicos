@@ -21,7 +21,7 @@ Dor 2 do hackathon — *Gestão de Marketplace e E-commerce*. Principais problem
 
 ## 3. Público-alvo
 
-Pequenos e médios varejistas que vendem em mais de um canal digital (Mercado Livre, Shopee, Magalu).
+Pequenos varejistas que vendem em mais de um canal digital (Mercado Livre, Shopee, Magalu).
 
 Usuários dentro da empresa (representados na tela **Configurações › Equipe**): administrador(a), operação, financeiro e expedição. As permissões de cada papel são **Pendente de definição**.
 
