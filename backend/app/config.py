@@ -10,7 +10,10 @@ RAIZ_REPO = PASTA_BACKEND.parent
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=PASTA_BACKEND / ".env", env_file_encoding="utf-8", extra="ignore")
+    # str_strip_whitespace: valor colado com espaço ou quebra de linha no fim (comum no painel do Render)
+    # vira o valor limpo; sem isso, a DATABASE_URL apontava para o banco "postgres\n", que não existe.
+    model_config = SettingsConfigDict(env_file=PASTA_BACKEND / ".env", env_file_encoding="utf-8", extra="ignore",
+                                      str_strip_whitespace=True)
 
     # Supabase > Connect > Session pooler (porta 5432). A chave anon do bot não permite criar tabelas.
     database_url: str = ""
