@@ -12,10 +12,12 @@ if (!process.env.DATABASE_URL) throw new Error('Configure DATABASE_URL em bot_es
 if (!/^[a-z_][a-z0-9_]{0,40}$/.test(SCHEMA) || SCHEMA === 'public') throw new Error('DB_SCHEMA inválido.');
 
 const local = /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL);
+// Conexões do bot. Entram na mesma conta do backend no Pool Size do Session pooler do Supabase:
+// WEB_CONCURRENCY × DB_POOL_MAX (backend) + DB_POOL_MAX (bot) ≤ Pool Size.
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: local ? false : { rejectUnauthorized: false },
-    max: 5,
+    max: Number(process.env.DB_POOL_MAX) || 3,
 });
 pool.on('error', (err) => console.log('Erro na conexão com o banco:', err.message));
 
@@ -143,6 +145,19 @@ bot.use(async (ctx, next) => {
             novo_produto: {},
             restaurada: false,
         };
+    }
+    // Conta apagada (ex.: conta Demo expirada) ou acesso removido no painel: a sessão deixa de valer.
+    if (ctx.session.empresa_id) {
+        const ativo = await um(
+            `select 1 as ok from usuario_empresa where usuario_id = $1 and empresa_id = $2 and status = 'ativo'`,
+            [ctx.session.usuario_id, ctx.session.empresa_id]
+        );
+        if (!ativo) {
+            Object.assign(ctx.session, {
+                usuario_id: null, empresa_id: null, empresa_nome: null, loja_id: null, loja_nome: null,
+                estado: null, temp_sku: null, novo_produto: {},
+            });
+        }
     }
     // A sessão fica em memória: depois de reiniciar o bot, o login volta pelo vínculo salvo no banco.
     if (!ctx.session.empresa_id && !ctx.session.restaurada && ctx.chat) {
@@ -659,7 +674,15 @@ bot.catch((err, ctx) => {
 const http = require('http');
 http.createServer((req, res) => { res.writeHead(200); res.end('Bot Online!'); }).listen(process.env.PORT || 3001);
 
-bot.launch();
-console.log(`🤖 Bot ligado ao Taylor (schema ${SCHEMA}), com briefings às 9h, 13h e 18h!`);
+// Long polling (getUpdates): o bot busca as mensagens no Telegram; não há webhook.
+// Só pode haver UMA cópia ligada por token (a segunda recebe erro 409 do Telegram).
+bot.launch().catch((err) => {
+    console.log('Erro ao iniciar o bot (outra cópia ligada com o mesmo token?):', err.message);
+    process.exit(1);
+});
+// Mostra qual bot é este token (o link do painel, CONFIG.telegram, deve apontar para ele).
+bot.telegram.getMe()
+    .then((me) => console.log(`🤖 Bot @${me.username} ligado ao Taylor (schema ${SCHEMA}), com briefings às 9h, 13h e 18h!`))
+    .catch((err) => console.log('Não foi possível confirmar o bot no Telegram (confira o TELEGRAM_TOKEN):', err.message));
 process.once('SIGINT', () => { bot.stop('SIGINT'); pool.end(); });
 process.once('SIGTERM', () => { bot.stop('SIGTERM'); pool.end(); });
