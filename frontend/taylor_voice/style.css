@@ -1,0 +1,93 @@
+/* Taylor Voice — mesmo visual do painel do Assistente Taylor (tema escuro por padrão, tema claro no botão do topo). */
+:root, body[data-tema="escuro"] {
+    --bg: #0c1826; --card: #122236; --card-2: #182c45; --head-a: #234978; --head-b: #1b3a63;
+    --text: #e4eaf5; --muted: #8fa3bf; --line: rgba(125, 184, 255, .18);
+    --accent: #499cff; --accent-2: #7db8ff; --user: #234978; --user-text: #ffffff;
+    --danger: #F0416C; --shadow: 0 20px 50px rgba(0, 0, 0, .45);
+}
+body[data-tema="claro"] {
+    --bg: #eaf0f8; --card: #ffffff; --card-2: #f1f5fb; --head-a: #2f6fd6; --head-b: #4a8df0;
+    --text: #12233a; --muted: #5d6f86; --line: rgba(30, 80, 160, .2);
+    --accent: #2f7df0; --accent-2: #2a68c4; --user: #dbe9ff; --user-text: #12233a;
+    --danger: #d92d5a; --shadow: 0 16px 40px rgba(20, 50, 100, .14);
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0; min-height: 100vh; color: var(--text);
+    font: 15px/1.5 "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg) radial-gradient(900px 420px at 85% -8%, color-mix(in srgb, var(--accent) 16%, transparent), transparent);
+}
+
+.taylor { width: min(560px, calc(100% - 32px)); margin: 0 auto; padding: 22px 0 28px; }
+
+.topo { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.marca { display: flex; align-items: center; gap: 10px; }
+.marca img { border-radius: 10px; }
+.marca strong { font: 800 1.6rem/1 "Bricolage Grotesque", "DM Sans", sans-serif; color: var(--accent); }
+.tema { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text); font: 600 .82rem "DM Sans", sans-serif; cursor: pointer; }
+.tema:focus-visible, .quick-actions button:focus-visible, .voice-stop:focus-visible, .voice-btn:focus-visible, .enviar:focus-visible, .chat-input input:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.assistente { display: flex; flex-direction: column; height: min(720px, calc(100vh - 110px)); min-height: 520px; overflow: hidden;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow), inset 0 2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+
+.assistente-topo { display: flex; align-items: center; gap: 12px; padding: 14px 18px; color: #fff;
+    background: linear-gradient(90deg, var(--head-a), var(--head-b)); border-bottom: 3px solid var(--accent); }
+.assistente-topo img { border-radius: 10px; }
+.assistente-topo strong { display: block; font: 700 1rem "Bricolage Grotesque", "DM Sans", sans-serif; }
+.assistente-topo small { color: #8ff0c0; font-weight: 600; }
+
+.conversa { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; }
+.message { align-self: flex-start; max-width: 92%; padding: 12px 16px; border-radius: 12px; background: var(--card-2);
+    border-left: 3px solid var(--accent-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.message.user { align-self: flex-end; border-left: 0; border-right: 3px solid var(--accent); background: var(--user); color: var(--user-text); }
+.message.erro { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--card-2)); }
+
+.quick-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 12px; }
+.quick-actions button { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent;
+    color: var(--accent-2); font: 500 .8rem "DM Sans", sans-serif; cursor: pointer; }
+.quick-actions button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.quick-actions button:disabled, .enviar:disabled { opacity: .5; cursor: not-allowed; }
+
+.voice-status { --voice-c: #499cff; display: flex; align-items: center; gap: 10px; margin: 0 18px 10px; padding: 10px 12px 10px 14px;
+    border-radius: 10px; border-left: 3px solid var(--voice-c); font-size: .86rem; font-weight: 500;
+    background: color-mix(in srgb, var(--voice-c) 12%, transparent); }
+.voice-status[hidden] { display: none; }
+.voice-status[data-state="ouvindo"] { --voice-c: #F0416C; }
+.voice-status[data-state="processando"] { --voice-c: #FFC24B; }
+.voice-status[data-state="falando"] { --voice-c: #499cff; }
+.voice-status[data-state="erro"] { --voice-c: #F0416C; }
+.voice-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voice-status[data-state="erro"] .voice-label { white-space: normal; }
+.voice-wave { display: flex; align-items: center; gap: 3px; height: 18px; }
+.voice-wave i { width: 3px; height: 6px; border-radius: 2px; background: var(--voice-c); animation: voice-bar .9s ease-in-out infinite; animation-delay: calc(var(--n) * .12s); }
+.voice-status[data-state="processando"] .voice-wave i { animation-duration: 1.6s; }
+.voice-status[data-state="erro"] .voice-wave, .voice-status[data-state="erro"] .voice-stop { display: none; }
+.voice-stop { padding: 4px 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+    background: transparent; color: inherit; font: 600 .78rem "DM Sans", sans-serif; cursor: pointer; }
+.voice-stop:hover { background: color-mix(in srgb, var(--voice-c) 18%, transparent); }
+
+.chat-input { display: flex; margin: 0 18px 18px; }
+.chat-input input { flex: 1; min-width: 0; height: 50px; padding: 0 16px; border-radius: 10px 0 0 10px; border: 1px solid var(--line);
+    background: var(--card-2); color: var(--text); font: 400 .95rem "DM Sans", sans-serif; }
+.chat-input input::placeholder { color: var(--muted); }
+.voice-btn, .enviar { width: 52px; height: 50px; border: 0; cursor: pointer; display: grid; place-items: center; }
+.voice-btn { background: color-mix(in srgb, var(--accent) 16%, var(--card-2)); color: var(--accent-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.enviar { border-radius: 0 10px 10px 0; background: linear-gradient(135deg, #499bfe, #7db8ff); color: #0c1826; font-size: 1.1rem; font-weight: 700; }
+.voice-btn.ouvindo { background: #F0416C; color: #fff; animation: voice-pulse 1.2s ease-in-out infinite; }
+.voice-btn.processando { background: #FFC24B; color: #0c1826; pointer-events: none; }
+.voice-btn.falando { background: #499cff; color: #fff; }
+
+.message.typing { display: inline-flex; align-items: center; gap: 4px; }
+.message.typing i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .4; animation: voice-dot 1s ease-in-out infinite; }
+.message.typing i:nth-child(2) { animation-delay: .15s; }
+.message.typing i:nth-child(3) { animation-delay: .3s; }
+
+@keyframes voice-bar { 0%, 100% { height: 5px; } 50% { height: 18px; } }
+@keyframes voice-dot { 0%, 100% { opacity: .3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+@keyframes voice-pulse { 50% { box-shadow: 0 0 0 6px rgba(240, 65, 108, .25); } }
+@media (prefers-reduced-motion: reduce) { .voice-wave i, .voice-btn.ouvindo, .message.typing i { animation: none; } }
+@media (max-width: 520px) { .assistente { height: calc(100vh - 100px); } }

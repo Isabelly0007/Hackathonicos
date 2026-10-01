@@ -1,7 +1,7 @@
 # Taylor — back-end (FastAPI + Supabase)
 
 Implementa os contratos de [`docs/api-backend.md`](../docs/api-backend.md) sobre o modelo de
-[`docs/modelo-dados.md`](../docs/modelo-dados.md) e já está ligado ao front (`index.html` + `javascript.js`).
+[`docs/modelo-dados.md`](../docs/modelo-dados.md) e já está ligado ao front (`frontend/index.html` + `frontend/javascript.js`).
 Marketplaces e SEFAZ são **simulados** (RN019, RN024).
 
 ## Onde ficam os dados
@@ -65,7 +65,7 @@ backend/
   setup_db.py                 # cria o schema (nunca toca no public)
   teste_carga.py              # N pessoas ao mesmo tempo criando conta Demo e navegando
   app/
-    main.py                   # FastAPI, CORS, rotas em /api, front estático (só os arquivos do front)
+    main.py                   # FastAPI, CORS, rotas em /api, front estático (só a pasta ../frontend)
     auth.py                   # JWT próprio + bcrypt + empresa ativa (X-Empresa-Id para multi-CNPJ)
     routers/                  # uma rota por tela
     services/                 # regras: estoque, pedidos, sincronização, fiscal, notificações, assistente, contas_demo
@@ -75,10 +75,10 @@ backend/
 
 ## Integração com o front
 
-`javascript.js` usa `CONFIG.useApi = true`. Publicado (fora de localhost) ou aberto em `http://localhost:8000`,
+`frontend/javascript.js` usa `CONFIG.useApi = true`. Publicado (fora de localhost) ou aberto em `http://localhost:8000`,
 chama `/api` no mesmo endereço; aberto como arquivo ou por outro servidor local, chama
 `http://localhost:8000/api`. Se o back-end cair, as leituras voltam aos dados de exemplo (comportamento
-original do front). O protótipo `taylor_voice/` segue a mesma regra e envia o token salvo pelo Taylor.
+original do front). O protótipo `frontend/taylor_voice/` segue a mesma regra e envia o token salvo pelo Taylor.
 
 | Tela | O que passou a funcionar |
 |---|---|

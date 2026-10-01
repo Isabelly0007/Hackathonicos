@@ -21,10 +21,10 @@ Documentação funcional e técnica do **Taylor**, software de gestão de market
 
 | Fonte | Tipo | Observação |
 |---|---|---|
-| `index.html` | Front-end | Página base; carrega `style.css` e `javascript.js` e monta tudo em `#root` |
-| `javascript.js` | Front-end | Todas as telas, dados de exemplo (mock), camada `api` e eventos |
-| `style.css` | Front-end | Estilos; confirma os status visuais (classes `.status.*`) |
-| `README.md` (raiz) | Documentação | Instruções de uso do front e de ativação do back-end (`CONFIG.useApi`) |
+| `frontend/index.html` | Front-end | Página base; carrega `style.css` e `javascript.js` e monta tudo em `#root` |
+| `frontend/javascript.js` | Front-end | Todas as telas, dados de exemplo (mock), camada `api` e eventos |
+| `frontend/style.css` | Front-end | Estilos; confirma os status visuais (classes `.status.*`) |
+| `frontend/README.md` | Documentação | Instruções de uso do front e de ativação do back-end (`CONFIG.useApi`) |
 | `Taylor_Resumo_Projeto.docx` | Especificação | Dor, solução, funcionalidades do MVP e tecnologias planejadas |
 | Fluxograma "HACKATHONICOS – Fluxograma do Sistema (MVP)" | Especificação | Copiado em [diagramas/fluxograma-mvp.png](diagramas/fluxograma-mvp.png) |
 | Repositório `github.com/isaadsl/Hackathonicos` | Código | Conteúdo idêntico à pasta local analisada |
@@ -49,7 +49,7 @@ Usada em todos os arquivos para diferenciar o que existe do que é simulado ou p
 > "Pendente de definição" dos demais arquivos registram a situação daquele momento; o que já foi
 > implementado e as decisões tomadas estão em [../backend/README.md](../backend/README.md).
 
-- O front-end é **HTML + CSS + JavaScript puro** (sem framework). Todas as telas são geradas por `javascript.js`.
+- O front-end é **HTML + CSS + JavaScript puro** (sem framework). Todas as telas são geradas por `frontend/javascript.js`.
 - O back-end existe em `backend/` (**Python + FastAPI**) e serve também o front-end no mesmo endereço. O objeto `CONFIG` do `javascript.js` vem com `useApi: true`; publicado ou aberto pelo back-end, `apiBase` é `"/api"`. Se a API falhar, as leituras voltam para os dados de exemplo.
 - O banco é o **Supabase (PostgreSQL)**, com as tabelas no schema `taylor` ([modelo-dados.md](modelo-dados.md) + acréscimos marcados no `backend/db/schema.sql` e no `backend/db/migracoes.sql`).
 - O assistente de IA roda no back-end: o **Gemini** (opcional) identifica a intenção e o back-end monta a resposta com os dados da empresa.

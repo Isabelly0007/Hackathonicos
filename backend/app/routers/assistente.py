@@ -1,6 +1,6 @@
 """Assistente de IA (RF038, RF039). Contrato proposto: api-backend.md §3.11.
 
-Também atende o protótipo de voz (taylor_voice/voice.js), que envia só {"message"}.
+Também atende o protótipo de voz (frontend/taylor_voice/voice.js), que envia só {"message"}.
 """
 
 from typing import Literal

@@ -1,8 +1,8 @@
 """Assistente Taylor (RN033, UC17): identifica a intenção e responde com dados da empresa.
 
-Ordem: ação rápida exata → Gemini (se GEMINI_API_KEY) → palavras-chave.
-Se o Gemini falhar, as palavras-chave assumem; só sem nenhuma intenção
-reconhecida a resposta é a padrão.
+Ordem: ação rápida exata → pergunta livre com o Gemini (assistente_ia, se GEMINI_API_KEY)
+→ palavras-chave. Se o Gemini falhar, as palavras-chave assumem; só sem nenhuma
+intenção reconhecida a resposta é a padrão.
 """
 
 import unicodedata
@@ -11,8 +11,8 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from .. import db
-from ..adapters import gemini
 from ..formatacao import brl, tendencia
+from . import assistente_ia
 
 RESPOSTA_PADRAO = (
     "Ainda estou aprendendo a responder isso. Posso ajudar com estoque, "
@@ -137,13 +137,16 @@ def responder(empresa_id: UUID, fuso: ZoneInfo, mensagem: str) -> tuple[dict, bo
     """Retorna (resposta, gemini_falhou_sem_alternativa)."""
     intencao = ACOES_RAPIDAS.get(mensagem.strip())
     gemini_falhou = False
-    if intencao is None and gemini.configurado():
-        try:
-            intencao = gemini.identificar_intencao(mensagem, INTENCOES)
-        except gemini.GeminiIndisponivel:
+
+    if intencao is None:
+        # Pergunta livre: o Gemini consulta o banco por ferramentas de leitura.
+        livre = assistente_ia.responder_livre(empresa_id, fuso, mensagem)
+        if livre is not None:
+            resposta, falhou = livre
+            if not falhou:
+                return resposta, False
             gemini_falhou = True
-    if intencao in (None, "desconhecida") and (intencao is None or not gemini.configurado()):
-        intencao = _por_palavras_chave(mensagem)
+        intencao = _por_palavras_chave(mensagem)  # sem chave ou Gemini fora
 
     if intencao not in CONSULTAS:
         return {"reply": RESPOSTA_PADRAO, "intent": "desconhecida", "data": [], "action_executed": None}, gemini_falhou

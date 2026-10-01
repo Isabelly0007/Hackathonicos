@@ -1655,7 +1655,7 @@ function renderHelp() {
       <div class="side-stack">
         <article class="card">
           <div class="card-head"><strong>Fale com a gente</strong></div>
-          <button class="contact-row" type="button" data-action="open-chat"><span class="notif-icon">✦</span><div><strong>Assistente IA</strong><small>Respostas instantâneas sobre sua operação</small></div>${icon("chevron")}</button>
+          <button class="contact-row" type="button" data-action="open-chat"><span class="notif-icon">✦</span><div><strong>Assistente de Voz IA</strong><small>Fale ou digite: respostas instantâneas sobre sua operação</small></div>${icon("chevron")}</button>
           <a class="contact-row" href="${CONFIG.telegram}" target="_blank" rel="noopener"><span class="notif-icon tone-telegram">${icon("telegram")}</span><div><strong>Suporte no Telegram</strong><small>Seg. a sex., das 8h às 20h</small></div>${icon("chevron")}</a>
           <a class="contact-row" href="mailto:${CONFIG.supportEmail}"><span class="notif-icon tone-purple">${icon("mail")}</span><div><strong>E-mail</strong><small>${CONFIG.supportEmail} · resposta em até 24h</small></div>${icon("chevron")}</a>
         </article>
@@ -1678,7 +1678,7 @@ function renderShell() {
       ${logo()}
       <nav>${pages.map((p) => `<button type="button" class="${state.page === p.label ? "active" : ""}" data-page="${p.label}"><span>${icon(p.icon)}</span>${p.label}</button>`).join("")}</nav>
       <div class="nav-separator"></div>
-      <button class="ai-button" type="button" data-action="open-chat"><span>✦</span>Assistente IA <b>Novo</b></button>
+      <button class="ai-button" type="button" data-action="open-chat"><span>✦</span>Assistente de Voz IA <b>Novo</b></button>
       <div class="side-footer">
         ${[["Notificações", "bell"], ["Configurações", "gear"], ["Ajuda", "help"]]
           .map(
@@ -1704,14 +1704,20 @@ function renderShell() {
       </header>
       <main class="content" id="content"></main>
     </div>
-    <aside class="chat-panel card" id="chat-panel" hidden>
-      <div class="chat-head">${logo(true)}<div><strong>Assistente ${CONFIG.brand}</strong><small>● Online</small></div><button type="button" data-action="close-chat" aria-label="Fechar chat">×</button></div>
-      <div class="message">Olá! Como posso ajudar na sua operação?</div>
+    <aside class="chat-panel card" id="chat-panel" aria-label="Assistente de Voz IA" hidden>
+      <div class="chat-head">${logo(true)}<div><strong>Assistente de Voz IA</strong><small id="voice-online">● Online</small></div><button type="button" data-action="close-chat" aria-label="Fechar assistente">×</button></div>
+      <div class="chat-log" id="chat-log" aria-live="polite">
+        <div class="message">Olá! Como posso ajudar na sua operação? Toque no microfone e fale, ou digite abaixo.</div>
+      </div>
       <div class="quick-actions" id="quick-actions">${Object.keys(chatAnswers).map((t) => `<button type="button" data-quick="${t}">${t}</button>`).join("")}</div>
-      <form class="chat-input with-voice" id="chat-form"><input id="chat-input" placeholder="Pergunte sobre sua operação..." autocomplete="off" /><button type="button" class="voice-btn" data-action="voice" aria-label="Falar com o assistente" title="Falar">🎤</button><button type="submit" aria-label="Enviar">→</button></form>
-      ${telegramLink("Abrir no Telegram", "telegram-link")}
+      <div class="voice-status" id="voice-status" data-state="parado" hidden role="status" aria-live="polite">
+        <span class="voice-wave" aria-hidden="true"><i style="--n:0"></i><i style="--n:1"></i><i style="--n:2"></i><i style="--n:3"></i><i style="--n:4"></i></span>
+        <span class="voice-label" id="voice-label"></span>
+        <button type="button" class="voice-stop" data-action="voice-stop">Parar</button>
+      </div>
+      <form class="chat-input with-voice" id="chat-form"><input id="chat-input" placeholder="Pergunte sobre sua operação..." autocomplete="off" aria-label="Pergunta por texto" /><button type="button" class="voice-btn" id="voice-btn" data-action="voice" aria-label="Falar com o assistente" aria-pressed="false" title="Falar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6"/></svg></button><button type="submit" class="chat-send" aria-label="Enviar">→</button></form>
     </aside>
-    <button class="chat-fab" type="button" data-action="toggle-chat" aria-label="Abrir assistente no Telegram">${icon("telegram")}</button>
+    <a class="chat-fab" href="${CONFIG.telegram}" target="_blank" rel="noopener" aria-label="Abrir o bot no Telegram" title="Abrir no Telegram">${icon("telegram")}</a>
     <div class="toast" id="toast" role="status" hidden></div>
   </div>`;
   updateThemeButton();
@@ -1797,54 +1803,184 @@ async function withSplash(modo, tarefa) {
 }
 
 /* ---------- 5. EVENTOS ---------- */
+/* Assistente de Voz IA (RF038/RF039), mesma estrutura do frontend/taylor_voice/voice.js:
+   fala -> texto (pt-BR) -> POST /api/assistant/messages -> resposta no chat e, por voz, falada.
+   A interpretação (Gemini + consulta ao estoque) acontece no back-end (services/assistente_ia.py). */
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const VOICE_LABELS = { ouvindo: "Ouvindo...", processando: "Processando...", falando: "Respondendo..." };
+const VOICE_ERRORS = {
+  "not-allowed": "Microfone bloqueado. Permita o acesso nas configurações do navegador e tente de novo.",
+  "service-not-allowed": "Microfone bloqueado. Permita o acesso nas configurações do navegador e tente de novo.",
+  "no-speech": "Não ouvi nada. Toque no microfone e fale de novo.",
+  "audio-capture": "Nenhum microfone encontrado neste dispositivo.",
+  network: "O reconhecimento de voz precisa de internet e não conseguiu conectar.",
+};
+const voice = { state: "parado", rec: null, round: 0, ptVoice: null, errorTimer: null, busy: false };
+
+function setVoiceState(next, text) {
+  voice.state = next;
+  window.clearTimeout(voice.errorTimer);
+  const bar = $("#voice-status");
+  const btn = $("#voice-btn");
+  const online = $("#voice-online");
+  if (bar) {
+    bar.dataset.state = next;
+    bar.hidden = next === "parado";
+    $("#voice-label").textContent = text || VOICE_LABELS[next] || "";
+  }
+  if (online) online.textContent = "● " + (next === "parado" || next === "erro" ? "Online" : VOICE_LABELS[next]);
+  if (btn) {
+    ["ouvindo", "processando", "falando"].forEach((s) => btn.classList.toggle(s, s === next));
+    btn.setAttribute("aria-pressed", String(next === "ouvindo"));
+  }
+  if (next === "erro") voice.errorTimer = window.setTimeout(() => voice.state === "erro" && setVoiceState("parado"), 5000);
+}
+
 function addChatMessage(text, who) {
-  const panel = $("#chat-panel");
-  const quick = $("#quick-actions");
+  const log = $("#chat-log");
+  if (!log) return null;
   const div = document.createElement("div");
-  div.className = "message" + (who === "user" ? " user" : "");
-  div.textContent = text;
-  panel.insertBefore(div, quick);
-  panel.scrollTop = panel.scrollHeight;
+  div.className = "message" + (who ? " " + who : "");
+  if (text) div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+function showTyping() {
+  const div = addChatMessage("", "typing");
+  if (div) {
+    div.setAttribute("aria-label", "Assistente está digitando");
+    div.innerHTML = "<i></i><i></i><i></i>";
+  }
+  return div;
+}
+
+function lockChat(on) {
+  $$("#quick-actions button").forEach((b) => (b.disabled = on));
+  const send = $(".chat-send");
+  if (send) send.disabled = on;
+}
+
+// Voz de saída: pt-BR, frases curtas (evita o corte do Chrome em falas longas) e nunca duas ao mesmo tempo.
+function pickVoice() {
+  const list = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  voice.ptVoice = list.find((v) => v.lang === "pt-BR") || list.find((v) => (v.lang || "").toLowerCase().startsWith("pt")) || null;
+}
+if (window.speechSynthesis) {
+  pickVoice();
+  window.speechSynthesis.addEventListener("voiceschanged", pickVoice);
+}
+
+function stopSpeaking() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
+function speak(text) {
+  return new Promise((resolve) => {
+    const clean = String(text).replace(/[*_`#>]/g, " ").replace(/\s+/g, " ").trim();
+    if (!window.speechSynthesis || !clean) return resolve();
+    stopSpeaking();
+    // Só divide em ponto seguido de espaço: "R$ 7.320,50" continua inteiro.
+    const parts = clean.replace(/([.!?])\s+/g, "$1\u0001").split("\u0001").filter(Boolean);
+    let left = parts.length;
+    const done = () => (--left <= 0 ? resolve() : null);
+    setVoiceState("falando");
+    parts.forEach((t) => {
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = "pt-BR";
+      if (voice.ptVoice) u.voice = voice.ptVoice;
+      u.onend = done;
+      u.onerror = done; // "canceled" também cai aqui
+      window.speechSynthesis.speak(u);
+    });
+  });
 }
 
 // Pergunta ao backend (POST /api/assistant/messages). Por voz, a resposta também é falada.
 async function answerChat(question, inputMode = "text") {
-  addChatMessage(question, "user");
+  const message = String(question).trim();
+  if (!message || voice.busy) return;
+  voice.busy = true;
+  lockChat(true);
+  const round = voice.round;
+  addChatMessage(message, "user");
+  if (inputMode === "voice") setVoiceState("processando");
+  const typing = showTyping();
+
+  let reply;
+  let failed = false;
   if (!CONFIG.useApi) {
-    const reply = chatAnswers[question] || "Ainda estou aprendendo a responder isso. Conecte o backend para ver dados reais da sua operação.";
-    window.setTimeout(() => addChatMessage(reply, "bot"), 400);
-    return;
+    await new Promise((r) => window.setTimeout(r, 400));
+    reply = chatAnswers[message] || "Ainda estou aprendendo a responder isso. Conecte o backend para ver dados reais da sua operação.";
+  } else {
+    const res = await apiSend("POST", "/assistant/messages", { message, channel: "app", input_mode: inputMode });
+    // O back-end devolve 502 com um `reply` padrão quando o Gemini está fora: mostrar esse texto.
+    reply = res.data && res.data.reply;
+    if (!reply) {
+      failed = true;
+      reply = res.status === 401 ? "Sua sessão expirou. Entre de novo para usar o assistente." : apiError(res, "Não consegui responder agora. Tente de novo em instantes.");
+    }
   }
-  const res = await apiSend("POST", "/assistant/messages", { message: question, channel: "app", input_mode: inputMode });
-  const reply = (res.data && (res.data.reply || res.data.detail)) || "Não consegui responder agora. Tente de novo em instantes.";
-  addChatMessage(reply, "bot");
-  if (inputMode === "voice") speak(reply);
+
+  if (typing) typing.remove();
+  addChatMessage(reply, failed ? "erro" : "bot");
+  voice.busy = false;
+  lockChat(false);
+
+  // Por voz: texto + voz. Digitado ou atalho: só texto.
+  if (inputMode !== "voice" || round !== voice.round) return;
+  await speak(reply);
+  if (round === voice.round) setVoiceState("parado");
 }
 
-/* Voz (RF039): reconhecimento e síntese do próprio navegador (Web Speech API), como no protótipo taylor_voice. */
-const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let listening = null;
-
-function speak(text) {
-  if (!window.speechSynthesis) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "pt-BR";
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(u);
+function stopVoice() {
+  voice.round++;
+  if (voice.rec) voice.rec.abort();
+  stopSpeaking();
+  setVoiceState("parado");
 }
 
-function startVoice(btn) {
-  if (!Recognition) return showToast("Seu navegador não suporta voz. Use o Chrome ou o Edge.", "error");
-  if (listening) return listening.stop();
-  listening = new Recognition();
-  listening.lang = "pt-BR";
-  listening.interimResults = false;
-  listening.onstart = () => btn.classList.add("listening");
-  listening.onend = () => ((listening = null), btn.classList.remove("listening"));
-  listening.onerror = (e) => showToast(e.error === "not-allowed" ? "Permita o uso do microfone para falar com o assistente." : "Não entendi. Tente de novo.", "error");
-  listening.onresult = (e) => answerChat(e.results[0][0].transcript, "voice");
-  listening.start();
+// Microfone: ouve; clicar de novo encerra a captura; clicar enquanto fala interrompe a fala.
+function startVoice() {
+  if (!Recognition) return setVoiceState("erro", "Este navegador não suporta voz. Use o Chrome ou o Edge, ou digite sua pergunta.");
+  if (voice.state === "ouvindo") return voice.rec && voice.rec.stop();
+  if (voice.state === "processando") return;
+  stopSpeaking();
+  voice.round++;
+
+  const rec = new Recognition();
+  voice.rec = rec;
+  rec.lang = "pt-BR";
+  rec.continuous = false;
+  rec.interimResults = true;
+  let heard = "";
+  let failed = false;
+
+  rec.onstart = () => setVoiceState("ouvindo");
+  rec.onresult = (e) => {
+    heard = Array.from(e.results).map((r) => r[0].transcript).join("");
+    setVoiceState("ouvindo", "Ouvindo: " + heard);
+  };
+  rec.onerror = (e) => {
+    if (e.error === "aborted") return;
+    failed = true;
+    setVoiceState("erro", VOICE_ERRORS[e.error] || "Não consegui ouvir (" + e.error + "). Tente de novo.");
+  };
+  rec.onend = () => {
+    if (voice.rec === rec) voice.rec = null;
+    if (failed || voice.state !== "ouvindo") return;
+    if (heard.trim()) answerChat(heard, "voice");
+    else setVoiceState("parado");
+  };
+  try {
+    rec.start();
+  } catch (err) {
+    voice.rec = null;
+    setVoiceState("erro", "Não foi possível iniciar o microfone. Tente de novo.");
+  }
 }
+window.addEventListener("beforeunload", stopSpeaking);
 
 let toastTimer;
 function showToast(text, kind = "ok") {
@@ -1943,13 +2079,14 @@ async function handleAction(action, btn) {
       $("#sidebar").classList.remove("mobile-open");
       break;
     case "close-chat":
+      stopVoice();
       $("#chat-panel").hidden = true;
       break;
-    case "toggle-chat":
-      $("#chat-panel").hidden = !$("#chat-panel").hidden;
-      break;
     case "voice":
-      startVoice(btn);
+      startVoice();
+      break;
+    case "voice-stop":
+      stopVoice();
       break;
     case "close-modal":
       closeModal();

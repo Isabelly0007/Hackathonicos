@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Taylor Voice | Assistente por voz</title>
+    <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body data-tema="escuro">
+
+    <main class="taylor">
+        <header class="topo">
+            <div class="marca">
+                <img src="../img/logo.svg" alt="" width="36" height="36" onerror="this.style.display='none'">
+                <strong>Taylor</strong>
+            </div>
+            <button id="tema" class="tema" type="button" aria-label="Alternar tema"></button>
+        </header>
+
+        <section class="assistente" aria-label="Assistente Taylor">
+            <div class="assistente-topo">
+                <img src="../img/logo.svg" alt="" width="40" height="40" onerror="this.style.display='none'">
+                <div>
+                    <strong>Assistente Taylor</strong>
+                    <small id="online">● Online</small>
+                </div>
+            </div>
+
+            <div class="conversa" id="chat" aria-live="polite">
+                <div class="message">Olá! Como posso ajudar na sua operação? Toque no microfone e fale, ou digite abaixo.</div>
+            </div>
+
+            <div class="quick-actions" id="atalhos">
+                <button type="button" data-quick="Consultar estoque">Consultar estoque</button>
+                <button type="button" data-quick="Vendas de hoje">Vendas de hoje</button>
+                <button type="button" data-quick="Pedidos pendentes">Pedidos pendentes</button>
+                <button type="button" data-quick="Estoque baixo">Estoque baixo</button>
+            </div>
+
+            <div class="voice-status" id="voice-status" data-state="parado" hidden role="status" aria-live="polite">
+                <span class="voice-wave" aria-hidden="true"><i style="--n:0"></i><i style="--n:1"></i><i style="--n:2"></i><i style="--n:3"></i><i style="--n:4"></i></span>
+                <span class="voice-label" id="voice-label"></span>
+                <button type="button" class="voice-stop" id="parar">Parar</button>
+            </div>
+
+            <form class="chat-input" id="form-texto" autocomplete="off">
+                <input id="entrada" type="text" placeholder="Pergunte sobre sua operação..." aria-label="Pergunta por texto">
+                <button type="button" class="voice-btn" id="microfone" aria-label="Falar com Taylor" aria-pressed="false" title="Falar">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6"/></svg>
+                </button>
+                <button type="submit" class="enviar" aria-label="Enviar">→</button>
+            </form>
+        </section>
+    </main>
+
+    <script src="voice.js"></script>
+
+</body>
+</html>

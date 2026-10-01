@@ -2,7 +2,7 @@
 
 Somente regras comprovadas pelas fontes do projeto. Cada regra informa a **fonte** e a **classificação**. Abreviações das fontes:
 
-- **JS** — `javascript.js` (telas, dados de exemplo, textos exibidos, FAQ da Ajuda);
+- **JS** — `frontend/javascript.js` (telas, dados de exemplo, textos exibidos, FAQ da Ajuda);
 - **FLX** — fluxograma do MVP ([diagramas/fluxograma-mvp.png](diagramas/fluxograma-mvp.png));
 - **DOC** — `Taylor_Resumo_Projeto.docx`.
 

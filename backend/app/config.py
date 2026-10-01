@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PASTA_BACKEND = Path(__file__).resolve().parent.parent
 RAIZ_REPO = PASTA_BACKEND.parent
+PASTA_FRONT = RAIZ_REPO / "frontend"
 
 
 class Settings(BaseSettings):
@@ -55,8 +56,8 @@ class Settings(BaseSettings):
 
     # Gemini (opcional: sem chave, o assistente usa palavras-chave)
     gemini_api_key: str = ""
-    # O Gemini só classifica a intenção: o modelo "lite" basta e responde em ~1 s. (O gemini-2.5-flash
-    # deixou de existir para as chaves novas: 404.)
+    # O Gemini responde perguntas livres consultando o estoque por ferramentas (services/assistente_ia.py).
+    # (O gemini-2.5-flash deixou de existir para as chaves novas: 404.)
     gemini_model: str = "gemini-3.5-flash-lite"
 
     # Simuladores

@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db, erros
-from .config import RAIZ_REPO, garantir_jwt_secret, settings
+from .config import PASTA_FRONT, garantir_jwt_secret, settings
 from .routers import (
     assistente, auth, configuracoes, dashboard, estoque, integracoes, notas, notificacoes, pedidos, produtos, relatorios,
 )
@@ -79,10 +79,10 @@ def saude():
 
 
 # Front-end na mesma origem, para o CONFIG.apiBase = "/api" funcionar sem CORS.
-# Só arquivos do front são expostos (nunca a raiz do repositório, que contém backend/.env).
+# Só arquivos do front são expostos (só a pasta frontend/, nunca a raiz do repositório, que contém backend/.env).
 if settings.servir_front:
     for arquivo in ("index.html", "style.css", "javascript.js"):
-        app.add_api_route(f"/{arquivo}", lambda a=arquivo: FileResponse(RAIZ_REPO / a), include_in_schema=False)
-    app.add_api_route("/", lambda: FileResponse(RAIZ_REPO / "index.html"), include_in_schema=False)
-    app.mount("/img", StaticFiles(directory=RAIZ_REPO / "img"), name="img")
-    app.mount("/taylor_voice", StaticFiles(directory=RAIZ_REPO / "taylor_voice", html=True), name="voz")
+        app.add_api_route(f"/{arquivo}", lambda a=arquivo: FileResponse(PASTA_FRONT / a), include_in_schema=False)
+    app.add_api_route("/", lambda: FileResponse(PASTA_FRONT / "index.html"), include_in_schema=False)
+    app.mount("/img", StaticFiles(directory=PASTA_FRONT / "img"), name="img")
+    app.mount("/taylor_voice", StaticFiles(directory=PASTA_FRONT / "taylor_voice", html=True), name="voz")

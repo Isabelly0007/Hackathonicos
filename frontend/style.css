@@ -811,9 +811,43 @@ th { text-transform: uppercase; letter-spacing: .08em; font-size: 10px; font-wei
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 .toast.error { border-color: rgba(255, 86, 114, .45); }
 .toast.error svg { color: var(--danger); }
-.chat-input.with-voice { grid-template-columns: 1fr 35px 35px; }
-.chat-input .voice-btn { border: 0; border-radius: 0; background: var(--surface-3); font-size: 14px; }
-.chat-input .voice-btn.listening { background: var(--danger); animation: splash-glow 1s ease infinite; }
+/* ---------- Assistente de Voz IA (mesma estrutura do taylor_voice) ---------- */
+.chat-panel { display: flex; flex-direction: column; height: min(560px, calc(100vh - 110px)); max-height: none; overflow: hidden; }
+.chat-panel[hidden] { display: none; }
+.chat-log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 16px 15px 12px; }
+.chat-log .message { margin: 0; max-width: 92%; align-self: flex-start; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; line-height: 1.5; }
+.chat-log .message.user { margin: 0; align-self: flex-end; border-left: 0; }
+.chat-log .message.erro { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--surface-2)); }
+.message.typing { display: inline-flex; align-items: center; gap: 4px; }
+.message.typing i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .4; animation: voice-dot 1s ease-in-out infinite; }
+.message.typing i:nth-child(2) { animation-delay: .15s; }
+.message.typing i:nth-child(3) { animation-delay: .3s; }
+.chat-panel .quick-actions { padding-bottom: 10px; }
+.quick-actions button:disabled, .chat-input button:disabled { opacity: .5; cursor: not-allowed; }
+
+.voice-status { --voice-c: var(--primary); display: flex; align-items: center; gap: 10px; margin: 0 15px 10px; padding: 8px 10px 8px 12px; border-radius: 8px; border-left: 3px solid var(--voice-c); font-size: 12px; font-weight: 500; background: color-mix(in srgb, var(--voice-c) 12%, transparent); }
+.voice-status[hidden] { display: none; }
+.voice-status[data-state="ouvindo"], .voice-status[data-state="erro"] { --voice-c: var(--danger); }
+.voice-status[data-state="processando"] { --voice-c: var(--warning); }
+.voice-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voice-status[data-state="erro"] .voice-label { white-space: normal; }
+.voice-wave { display: flex; align-items: center; gap: 3px; height: 18px; }
+.voice-wave i { width: 3px; height: 6px; border-radius: 2px; background: var(--voice-c); animation: voice-bar .9s ease-in-out infinite; animation-delay: calc(var(--n) * .12s); }
+.voice-status[data-state="processando"] .voice-wave i { animation-duration: 1.6s; }
+.voice-status[data-state="erro"] .voice-wave, .voice-status[data-state="erro"] .voice-stop { display: none; }
+.voice-stop { padding: 3px 9px; border-radius: 6px; border: 1px solid color-mix(in srgb, currentColor 28%, transparent); background: transparent; color: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.voice-stop:hover { background: color-mix(in srgb, var(--voice-c) 18%, transparent); }
+
+.chat-input.with-voice { grid-template-columns: 1fr 38px 38px; margin-bottom: 15px; }
+.chat-input .voice-btn { display: grid; place-items: center; border: 0; border-radius: 0; color: var(--primary) !important; background: var(--surface-3); }
+.chat-input .voice-btn.ouvindo { color: #fff !important; background: var(--danger); animation: voice-pulse 1.2s ease-in-out infinite; }
+.chat-input .voice-btn.processando { color: var(--ink) !important; background: var(--warning); pointer-events: none; }
+.chat-input .voice-btn.falando { color: #fff !important; background: var(--primary); }
+
+@keyframes voice-bar { 0%, 100% { height: 5px; } 50% { height: 18px; } }
+@keyframes voice-dot { 0%, 100% { opacity: .3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+@keyframes voice-pulse { 50% { box-shadow: 0 0 0 5px rgba(240, 65, 108, .25); } }
+@media (prefers-reduced-motion: reduce) { .voice-wave i, .chat-input .voice-btn.ouvindo, .message.typing i { animation: none; } }
 @media (max-width: 640px) {
   .detail-grid { grid-template-columns: 1fr; }
   .report-custom { flex-direction: column; align-items: stretch; }

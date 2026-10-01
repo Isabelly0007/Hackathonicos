@@ -214,7 +214,7 @@ mensagens no Telegram por *long polling* (não usa webhook).
    ```
 
    Ao ligar, ele mostra `🤖 Bot @EstoqueLojas_bot ligado ao Taylor...`. Se aparecer outro @, o
-   `CONFIG.telegram` do `javascript.js` precisa apontar para esse bot.
+   `CONFIG.telegram` do `frontend/javascript.js` precisa apontar para esse bot.
 
 > ⚠️ Deixe ligada **só uma cópia** do bot por token. Se ele já roda no Render, não ligue outra no seu
 > computador: o Telegram entrega cada mensagem para uma cópia só. No Render, configure as mesmas
@@ -305,8 +305,8 @@ Teste de carga (150 pessoas ao mesmo tempo, num Postgres local): veja [backend/R
 
 ## Quer só ver as telas, sem banco?
 
-Abra o arquivo `javascript.js`, troque `useApi: true` por `useApi: false` e dê dois cliques em
-`index.html`. O sistema abre com os dados de exemplo (qualquer e-mail e senha entram), mas nada é salvo.
+Abra o arquivo `frontend/javascript.js`, troque `useApi: true` por `useApi: false` e dê dois cliques em
+`frontend/index.html`. O sistema abre com os dados de exemplo (qualquer e-mail e senha entram), mas nada é salvo.
 
 ---
 

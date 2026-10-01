@@ -7,7 +7,7 @@
 | Supabase | Sim | **[REAL]** — banco de dados (PostgreSQL), schema `taylor`, conexão direta do back-end e do bot | Todas as telas (via back-end) |
 | Gemini | Sim (opcional) | **[REAL]** — identifica a intenção da mensagem quando há `GEMINI_API_KEY`; sem chave, palavras-chave | Painel "Assistente Taylor" |
 | Telegram | Sim | **[REAL]** — bot `@EstoqueLojas_bot` (`bot_estoque/`): consultas e atualizações de estoque, aviso de novo pedido e resumo | Botão flutuante, card Telegram, Integrações, Notificações, Ajuda, card da conta Demo |
-| Voz | Sim (no navegador) | **[REAL]** — Web Speech API: fala → texto → back-end → resposta falada | Microfone no chat do assistente; protótipo `taylor_voice/` |
+| Voz | Sim (no navegador) | **[REAL]** — Web Speech API: fala → texto → back-end → resposta falada | Microfone no chat do assistente; protótipo `frontend/taylor_voice/` |
 | Marketplaces (Mercado Livre, Shopee, Magalu) | Não | **[SIMULADO]** por decisão do MVP; OAuth real **[PLANEJADO]** | Dashboard, Produtos, Pedidos, Estoque, Marketplaces, Integrações |
 | Emissão fiscal (NF-e / SEFAZ) | Não | **[SIMULADO]** por decisão do MVP | Notas fiscais, Configurações › Empresa, Notificações, Ajuda |
 
